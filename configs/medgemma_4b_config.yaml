@@ -1,0 +1,81 @@
+# MedGemma 4B IT Architecture Configuration
+# Based on Gemma-3 4B + SigLIP-So400M
+# Source: google/medgemma-4b-it (HuggingFace)
+
+model:
+  name: medgemma-4b-it
+  model_type: gemma3
+  architecture: multimodal_lm
+
+language_model:
+  model_class: Gemma3ForCausalLM
+  hidden_size: 2048            # d_model
+  num_hidden_layers: 46        # transformer blocks
+  num_attention_heads: 8       # Q heads
+  num_key_value_heads: 4       # K/V heads (GQA: 2 Q heads per KV head)
+  head_dim: 256                # per-head dimension (hidden/n_heads)
+  intermediate_size: 16384     # FFN inner dimension (d_ffn)
+  vocab_size: 262144
+  max_position_embeddings: 131072
+  rms_norm_eps: 1.0e-06
+
+  attention:
+    type: grouped_query_attention
+    rope_theta: 1000000.0
+    rope_local_base_freq: 10000.0
+    sliding_window_size: 4096       # local attention window
+    attention_pattern: alternating  # even layers: local, odd: global
+    attn_logit_softcapping: 50.0
+
+  activation:
+    type: geglu                     # Gated GELU
+    hidden_act: gelu_pytorch_tanh
+
+  normalization:
+    type: RMSNorm
+    eps: 1.0e-06
+
+  # Weight matrix shapes per layer
+  weight_shapes:
+    q_proj: [2048, 2048]       # (out, in) = (n_heads * head_dim, d_model)
+    k_proj: [1024, 2048]       # (n_kv_heads * head_dim, d_model)
+    v_proj: [1024, 2048]       # (n_kv_heads * head_dim, d_model)
+    o_proj: [2048, 2048]       # (d_model, n_heads * head_dim)
+    gate_proj: [16384, 2048]   # (d_ffn, d_model)
+    up_proj:   [16384, 2048]   # (d_ffn, d_model)
+    down_proj: [2048, 16384]   # (d_model, d_ffn)
+
+  parameters:
+    per_layer: 113246208       # ~113M params per transformer layer
+    total_lm: 5209497600       # ~5.2B params (language model)
+
+vision_encoder:
+  model_class: SiglipVisionModel
+  hidden_size: 1152             # ViT-So400M hidden dim
+  num_hidden_layers: 27         # ViT depth
+  num_attention_heads: 16
+  intermediate_size: 4304       # FFN inner dim
+  image_size: 896               # input resolution
+  patch_size: 14                # patch size
+  num_channels: 3
+  num_patches: 4096             # (896/14)^2 = 4096
+
+  weight_shapes:
+    q_proj: [1152, 1152]
+    k_proj: [1152, 1152]
+    v_proj: [1152, 1152]
+    out_proj: [1152, 1152]
+    fc1: [4304, 1152]
+    fc2: [1152, 4304]
+
+  parameters:
+    per_layer: 15271680        # ~15M params per ViT layer
+    total_vision: 412336128    # ~412M params (SigLIP encoder)
+
+vision_projector:
+  type: linear_projection      # multi-modal projection layer
+  input_dim: 1152
+  output_dim: 2048
+  num_tokens: 256              # image tokens projected to LM space
+
+total_parameters: 4000000000  # ~4B params total (model card)

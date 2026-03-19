@@ -1,0 +1,193 @@
+{
+  "model_id": "medgemma-4b-demo",
+  "rank": 8,
+  "dac_bits": 12,
+  "n_chips": 10,
+  "total_mzis": 121568,
+  "total_area_mm2": 9606.0314,
+  "platform": {
+    "process": "220nm SOI",
+    "wavelength_nm": 1310,
+    "wg_width_nm": 450,
+    "mzi_pitch_um": 127.0,
+    "mzi_length_um": 300.0,
+    "heater": "TiN thermal phase shifter",
+    "pi_power_mW": 15.0
+  },
+  "chips": [
+    {
+      "chip_id": 0,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.self_attn.q_proj.weight"
+      ],
+      "matrix_types": [
+        "U",
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 1,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.self_attn.k_proj.weight"
+      ],
+      "matrix_types": [
+        "U",
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 2,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.self_attn.v_proj.weight"
+      ],
+      "matrix_types": [
+        "U",
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 3,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.self_attn.o_proj.weight"
+      ],
+      "matrix_types": [
+        "U",
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 4,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.mlp.gate_proj.weight"
+      ],
+      "matrix_types": [
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 5,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "chip_width_um": 82600.0,
+      "chip_height_um": 33385.0,
+      "chip_area_mm2": 2757.601,
+      "layers": [
+        "model.layers.0.mlp.gate_proj.weight"
+      ],
+      "matrix_types": [
+        "U"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 6,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.mlp.up_proj.weight"
+      ],
+      "matrix_types": [
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 7,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "chip_width_um": 82600.0,
+      "chip_height_um": 33385.0,
+      "chip_area_mm2": 2757.601,
+      "layers": [
+        "model.layers.0.mlp.up_proj.weight"
+      ],
+      "matrix_types": [
+        "U"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 8,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "chip_width_um": 82600.0,
+      "chip_height_um": 33385.0,
+      "chip_area_mm2": 2757.601,
+      "layers": [
+        "model.layers.0.mlp.down_proj.weight"
+      ],
+      "matrix_types": [
+        "Vh"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    },
+    {
+      "chip_id": 9,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "chip_width_um": 21160.0,
+      "chip_height_um": 9001.0,
+      "chip_area_mm2": 190.4612,
+      "layers": [
+        "model.layers.0.mlp.down_proj.weight"
+      ],
+      "matrix_types": [
+        "U"
+      ],
+      "mzi_pitch_um": 127.0,
+      "mzi_length_um": 300.0
+    }
+  ]
+}

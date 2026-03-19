@@ -1,0 +1,98 @@
+# Photonic Chip Platform Configuration
+# Target platform: 220nm Silicon-on-Insulator (SOI)
+# Available through: imec iSiPP50G, AIM Photonics, GlobalFoundries 45CLO
+
+platform:
+  name: 220nm_SOI
+  foundry: AIM_Photonics          # or imec, GlobalFoundries
+  process_node: 220nm_SOI
+  wafer_size: 200mm               # 200mm wafer (MPW runs)
+  die_size: [10.0, 10.0]          # [width_mm, height_mm]
+  dies_per_wafer: 900             # approximate (200mm wafer)
+
+waveguide:
+  material: silicon
+  cladding: silicon_dioxide
+  core_width_nm: 450
+  core_height_nm: 220
+  wavelength_nm: 1310             # O-band (lower group velocity dispersion)
+  n_eff: 2.40                     # TE00 mode effective index
+  n_group: 4.20                   # group index
+  propagation_loss_db_per_cm: 2.0 # typical 220nm SOI
+  bend_radius_min_um: 5.0         # minimum bend radius for negligible bend loss
+  waveguide_pitch_um: 2.0         # minimum center-to-center waveguide spacing
+
+mzi:
+  # Directional coupler parameters
+  coupler_gap_nm: 200            # waveguide gap in coupling region
+  coupler_length_um: 10.0        # coupling length for 50:50 at 1310nm
+  coupling_tolerance: 0.01       # ±1% coupling ratio fabrication tolerance
+
+  # Phase shifter (thermal)
+  heater_material: TiN           # titanium nitride
+  heater_width_um: 2.5
+  heater_height_nm: 120
+  oxide_thickness_um: 1.0        # SiO2 between heater and waveguide
+  pi_power_mW: 15.0              # power for π phase shift
+  pi_power_tolerance: 0.10       # ±10% process variation
+  thermal_bandwidth_kHz: 10.0    # thermal response bandwidth
+  static_power_mW: 0.0           # zero steady-state power (latched phase)
+
+  # MZI cell dimensions
+  cell_width_um: 200.0           # along propagation direction
+  cell_height_um: 8.0            # perpendicular (2 waveguide pitches × 2 + routing)
+  cell_area_um2: 1600.0          # 200 × 8 = 1600 μm²
+
+  # DAC interface
+  heater_resistance_ohm: 1000    # ±5% tolerance
+  max_voltage_V: 5.0
+  dac_bits: 12                   # 12-bit DAC resolution
+  dac_lsb_mV: 1.22              # 5V / 4096 ≈ 1.22 mV
+
+photodetector:
+  material: germanium_on_silicon
+  responsivity_A_per_W: 0.90     # at 1310nm
+  dark_current_nA: 5.0
+  bandwidth_GHz: 40.0
+  active_area_um2: 100.0         # 10μm × 10μm
+
+grating_coupler:
+  type: standard_1D_grating
+  insertion_loss_dB: 3.0
+  bandwidth_nm: 50.0
+  coupling_angle_deg: 10.0
+  pitch_nm: 590                  # grating period for 1310nm, 10° coupling angle
+
+capacity:
+  mzis_per_10mm_chip: 4096       # conservative estimate (10mm × 10mm)
+  heater_channels_per_chip: 8192 # 2× MZI count (theta + phi per MZI)
+  io_waveguides_per_edge: 64     # fiber array channels per chip edge
+  wdm_channels: 8                # WDM parallelism
+
+thermal:
+  stability_required_C: 0.01    # ±0.01°C for <1% phase drift
+  tec_power_W: 2.0              # TEC power at ΔT=10°C
+  on_chip_sensor: Si_thermistor  # temperature sensor type
+
+electrical_interface:
+  digital_bus: SPI              # phase DAC control
+  data_rate_MHz: 10             # SPI clock
+  adc_resolution_bits: 12      # photodetector readout ADC
+  supply_voltages_V:
+    - 3.3                       # digital logic
+    - 5.0                       # analog / heater drive
+    - 12.0                      # TEC driver
+
+packaging:
+  type: bare_die_on_pcb         # or ceramic_substrate or fiber_pigtail
+  fiber_array: 64ch_SMF28       # 64-channel fiber array (FC/APC)
+  connector: FC_APC
+
+# Compilation target parameters
+compilation:
+  default_rank: 64
+  default_dac_bits: 12
+  default_wavelength_nm: 1310
+  energy_threshold: 0.99         # retain 99% of weight energy
+  phase_noise_std_rad: 0.01     # fabrication phase noise model
+  coupler_error_std: 0.01       # coupler imbalance std deviation

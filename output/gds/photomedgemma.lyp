@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-properties>
+ <properties>
+  <frame-color>#00aaff</frame-color>
+  <fill-color>#00aaff</fill-color>
+  <name>Si waveguide</name>
+  <source>1/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ff4444</frame-color>
+  <fill-color>#ff4444</fill-color>
+  <name>TiN heater theta</name>
+  <source>2/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ff9900</frame-color>
+  <fill-color>#ff9900</fill-color>
+  <name>TiN heater phi</name>
+  <source>3/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ffdd00</frame-color>
+  <fill-color>#ffdd00</fill-color>
+  <name>Metal contacts</name>
+  <source>4/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#aaaaaa</frame-color>
+  <fill-color>#00000000</fill-color>
+  <name>Chip boundary</name>
+  <source>5/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ffffff</frame-color>
+  <fill-color>#00000000</fill-color>
+  <name>Labels</name>
+  <source>6/0@1</source>
+ </properties>
+</layer-properties>

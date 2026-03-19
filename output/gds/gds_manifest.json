@@ -1,0 +1,98 @@
+{
+  "model_id": "medgemma-4b-demo",
+  "dac_bits": 12,
+  "n_chips": 10,
+  "total_mzis": 120096,
+  "chips": [
+    {
+      "chip_id": 0,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_000.gds"
+    },
+    {
+      "chip_id": 1,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_001.gds"
+    },
+    {
+      "chip_id": 2,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_002.gds"
+    },
+    {
+      "chip_id": 3,
+      "n_mzis": 4032,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_003.gds"
+    },
+    {
+      "chip_id": 4,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_004.gds"
+    },
+    {
+      "chip_id": 5,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "width_mm": 82.6,
+      "height_mm": 33.512,
+      "gds_path": "output/gds/chip_005.gds"
+    },
+    {
+      "chip_id": 6,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_006.gds"
+    },
+    {
+      "chip_id": 7,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "width_mm": 82.6,
+      "height_mm": 33.512,
+      "gds_path": "output/gds/chip_007.gds"
+    },
+    {
+      "chip_id": 8,
+      "n_mzis": 32640,
+      "n_modes": 256,
+      "n_cols": 255,
+      "width_mm": 82.6,
+      "height_mm": 33.512,
+      "gds_path": "output/gds/chip_008.gds"
+    },
+    {
+      "chip_id": 9,
+      "n_mzis": 2016,
+      "n_modes": 64,
+      "n_cols": 63,
+      "width_mm": 21.16,
+      "height_mm": 9.128,
+      "gds_path": "output/gds/chip_009.gds"
+    }
+  ]
+}

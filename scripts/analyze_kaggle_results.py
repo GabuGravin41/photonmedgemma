@@ -51,7 +51,15 @@ def load_kaggle_results(path: str) -> dict:
     logger.info(f"Loaded Kaggle results from {path}")
     logger.info(f"  Model:    {data.get('model_id', '?')}")
     logger.info(f"  Query:    {data.get('query', '?')[:80]}")
-    logger.info(f"  Response: {data.get('response', '')[:120]}...")
+    n_images = data.get('n_images', 1)
+    logger.info(f"  Images:   {n_images}")
+    if data.get('per_image'):
+        for img in data['per_image']:
+            lc = img.get('layer_comparisons', {})
+            q_err = lc.get('q_proj', {}).get('mean_photonic_vs_svd', float('nan'))
+            logger.info(f"    {img['stem']}: q_phot_err={q_err:.2e}  all_pass={img.get('all_pass')}")
+    else:
+        logger.info(f"  Response: {data.get('response', '')[:120]}...")
     return data
 
 
@@ -190,8 +198,14 @@ def generate_comparison_report(
             "model_id":      kaggle_results.get("model_id"),
             "query":         kaggle_results.get("query"),
             "dicom_meta":    kaggle_results.get("dicom_meta", {}),
+            "n_images":      kaggle_results.get("n_images", 1),
+            "images":        kaggle_results.get("images", []),
         },
         "medgemma_response": kaggle_results.get("response"),
+        "per_image_responses": [
+            {"image": img["image"], "response": img["response"]}
+            for img in kaggle_results.get("per_image", [])
+        ],
         "kaggle_errors":     kaggle_results.get("layer_0_q_proj", {}),
         "local_simulations": local_simulations,
         "summary": {},
@@ -247,6 +261,14 @@ def generate_comparison_report(
             f"{s['total_mzis']:>8,}  "
             f"{'✓' if s['pass_1pct'] else '✗'}"
         )
+    per_img = full_report.get("per_image_responses", [])
+    if per_img:
+        lines += ["", "MedGemma responses per image:", "-" * 40]
+        for entry in per_img:
+            lines.append(f"  [{entry['image']}]")
+            for line in (entry.get("response") or "").split("\n")[:4]:
+                lines.append(f"    {line}")
+
     lines += [
         "",
         "Summary:",
@@ -257,9 +279,9 @@ def generate_comparison_report(
         full_report["summary"]["verdict"],
         "",
         "Interpretation:",
-        "  E(SVD∥W)    = error from rank truncation  (tunable via --rank)",
-        "  E(phot∥SVD) = error from MZI mesh         (should be <1e-14, machine precision)",
-        "  The photonic chip is essentially perfect — the only error comes from",
+        "  E(SVD||W)    = error from rank truncation  (tunable via --rank)",
+        "  E(phot||SVD) = error from MZI mesh         (should be <1e-14, machine precision)",
+        "  The photonic chip is essentially perfect -- the only error comes from",
         "  choosing how many singular values to keep (rank vs. accuracy tradeoff).",
         "=" * 70,
     ]
@@ -320,25 +342,68 @@ def main():
             sim = run_local_photonic_simulation(W, layer_name, rank=args.rank)
             local_sims.append(sim)
     else:
-        # Use error metrics already in the Kaggle JSON
-        q_info = kaggle.get("layer_0_q_proj", {})
-        if q_info:
-            local_sims.append({
-                "layer_name":           "lm_layer0_attn_q_proj",
-                "weight_shape":         q_info.get("weight_shape", []),
-                "rank":                 args.rank,
-                "energy_retained":      q_info.get("energy_retained", 0),
-                "svd_reconstruction_err": 0,
-                "clements_error_U":     0,
-                "clements_error_Vh":    0,
-                "total_mzis":           q_info.get("n_mzis_U", 0) + q_info.get("n_mzis_Vh", 0),
-                "n_test_vectors":       len(q_info.get("token_comparisons", [])),
-                "mean_svd_vs_full":     q_info.get("mean_svd_vs_digital", 0),
-                "mean_photonic_vs_svd": q_info.get("mean_photonic_vs_svd", 0),
-                "mean_photonic_vs_full":0,
-                "max_photonic_vs_svd":  0,
-                "pass_1pct":            q_info.get("mean_photonic_vs_svd", 1) < 0.01,
-            })
+        # Use error metrics already in the Kaggle JSON.
+        # Support both new multi-image format (per_image) and legacy single-image format.
+        per_image = kaggle.get("per_image", [])
+        if per_image:
+            # New format: aggregate across all images and all projections
+            proj_names = ("q_proj", "k_proj", "v_proj", "o_proj")
+            proj_key_map = {
+                "q_proj": "lm_layer0_attn_q_proj",
+                "k_proj": "lm_layer0_attn_k_proj",
+                "v_proj": "lm_layer0_attn_v_proj",
+                "o_proj": "lm_layer0_attn_o_proj",
+            }
+            q_info = kaggle.get("layer_0_q_proj", {})
+            for pname in proj_names:
+                phot_errs, svd_errs = [], []
+                for img in per_image:
+                    lc = img.get("layer_comparisons", {})
+                    if pname in lc:
+                        phot_errs.append(lc[pname]["mean_photonic_vs_svd"])
+                        svd_errs.append(lc[pname]["mean_svd_vs_digital"])
+                if not phot_errs:
+                    continue
+                mean_phot = float(np.mean(phot_errs))
+                mean_svd  = float(np.mean(svd_errs))
+                n_mzis_U  = q_info.get("n_mzis_U", 0) if pname == "q_proj" else 0
+                n_mzis_Vh = q_info.get("n_mzis_Vh", 0) if pname == "q_proj" else 0
+                local_sims.append({
+                    "layer_name":           proj_key_map[pname],
+                    "weight_shape":         q_info.get("weight_shape", []) if pname == "q_proj" else [],
+                    "rank":                 args.rank,
+                    "energy_retained":      per_image[0]["layer_comparisons"].get(pname, {}).get("energy", 0),
+                    "svd_reconstruction_err": 0,
+                    "clements_error_U":     0,
+                    "clements_error_Vh":    0,
+                    "total_mzis":           per_image[0]["layer_comparisons"].get(pname, {}).get("n_mzis_total", 0),
+                    "n_test_vectors":       per_image[0]["layer_comparisons"].get(pname, {}).get("n_tokens_tested", 0),
+                    "mean_svd_vs_full":     mean_svd,
+                    "mean_photonic_vs_svd": mean_phot,
+                    "mean_photonic_vs_full": 0,
+                    "max_photonic_vs_svd":  float(np.max(phot_errs)),
+                    "pass_1pct":            mean_phot < 0.01,
+                })
+        else:
+            # Legacy single-image format
+            q_info = kaggle.get("layer_0_q_proj", {})
+            if q_info:
+                local_sims.append({
+                    "layer_name":           "lm_layer0_attn_q_proj",
+                    "weight_shape":         q_info.get("weight_shape", []),
+                    "rank":                 args.rank,
+                    "energy_retained":      q_info.get("energy_retained", 0),
+                    "svd_reconstruction_err": 0,
+                    "clements_error_U":     0,
+                    "clements_error_Vh":    0,
+                    "total_mzis":           q_info.get("n_mzis_U", 0) + q_info.get("n_mzis_Vh", 0),
+                    "n_test_vectors":       len(q_info.get("token_comparisons", [])),
+                    "mean_svd_vs_full":     q_info.get("mean_svd_vs_digital", 0),
+                    "mean_photonic_vs_svd": q_info.get("mean_photonic_vs_svd", 0),
+                    "mean_photonic_vs_full": 0,
+                    "max_photonic_vs_svd":  0,
+                    "pass_1pct":            q_info.get("mean_photonic_vs_svd", 1) < 0.01,
+                })
 
     if not local_sims:
         logger.error("No simulation data available. Provide --weights-dir with W_*_layer0.npy files.")

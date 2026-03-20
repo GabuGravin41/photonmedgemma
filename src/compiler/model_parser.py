@@ -142,13 +142,6 @@ class ModelParser:
 
     def _load_from_local(self, path: str):
         """Load weights from a local directory (safetensors format)."""
-        try:
-            import safetensors.numpy as st_np
-        except ImportError:
-            raise ImportError(
-                "safetensors not installed. Run: pip install safetensors"
-            )
-
         path = Path(path)
 
         # Load model config
@@ -170,13 +163,28 @@ class ModelParser:
 
         logger.info(f"Loading {len(shard_files)} safetensors shards from {path}...")
 
-        self._weights = {}
-        for shard in shard_files:
-            logger.debug(f"  Loading shard: {shard.name}")
-            tensors = st_np.load_file(str(shard))
-            for name, tensor in tensors.items():
-                # Convert to float32 for numerical stability in SVD
-                self._weights[name] = tensor.astype(np.float32)
+        # Use safetensors.torch backend: handles bfloat16 that numpy cannot
+        try:
+            import torch
+            from safetensors.torch import load_file as st_load
+
+            self._weights = {}
+            for shard in shard_files:
+                logger.debug(f"  Loading shard: {shard.name}")
+                tensors = st_load(str(shard))
+                for name, tensor in tensors.items():
+                    # Cast bfloat16 / float16 → float32 for SVD numerical stability
+                    self._weights[name] = tensor.to(torch.float32).numpy()
+
+        except ImportError:
+            # Fallback: safetensors.numpy (only works if model has no bfloat16 tensors)
+            from safetensors.numpy import load_file as st_np_load
+            self._weights = {}
+            for shard in shard_files:
+                logger.debug(f"  Loading shard: {shard.name}")
+                tensors = st_np_load(str(shard))
+                for name, tensor in tensors.items():
+                    self._weights[name] = tensor.astype(np.float32)
 
     def _load_via_transformers(self):
         """Fallback: load via HuggingFace transformers library."""

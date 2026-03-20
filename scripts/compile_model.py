@@ -365,17 +365,9 @@ def main():
         encoder = PhaseEncoder(dac_bits=args.dac_bits)
         generator = NetlistGenerator(output_dir=str(output_path / "netlists"))
 
-        compiled_layers = []
-        for info, weight in layers:
-            decomposed = decomposer.decompose(info, weight)
-            compiled = mapper.map_layer(decomposed)
-            if compiled is None:
-                continue   # skipped due to max_mesh_size
-            compiled_layers.append(compiled)
-
-        # Save phase data as compressed numpy arrays (one file per layer).
-        # Bypasses PhaseEncoder.encode() which would create ~36M Python objects
-        # (~14GB RAM) for the full attention set — causing OOM kill.
+        # Save phase data immediately after each layer — never hold all meshes
+        # in RAM at once. A 2560×2560 Clements mesh = ~680MB of Python MZI
+        # objects; accumulating 4 layers before saving causes OOM kill.
         phases_dir = output_path / "phases"
         phases_dir.mkdir(exist_ok=True)
 
@@ -384,9 +376,9 @@ def main():
             "model_id": args.model,
             "rank": args.rank,
             "dac_bits": args.dac_bits,
-            "n_layers": len(compiled_layers),
-            "n_chips": mapper.total_chips(),
-            "n_mzis": mapper.total_mzis(),
+            "n_layers": 0,          # updated incrementally
+            "n_chips": 0,
+            "n_mzis": 0,
             "metadata": {
                 "dac_resolution_rad": lsb_rad,
                 "phase_rms_error_rad": lsb_rad / (2 * np.sqrt(3)),
@@ -394,25 +386,43 @@ def main():
             "layers": [],
         }
 
-        for cl in compiled_layers:
-            safe = cl.layer_name.replace("/", "_").replace(".", "_")
-            U_phases = cl.U_mesh.get_phase_map()
-            Vh_phases = cl.Vh_mesh.get_phase_map()
+        compiled_layers = []        # kept lightweight for netlist gen at end
+        for info, weight in layers:
+            decomposed = decomposer.decompose(info, weight)
+            compiled = mapper.map_layer(decomposed)
+            if compiled is None:
+                continue   # skipped due to max_mesh_size
+
+            # ── Save phases immediately, then free the heavy MZI lists ────────
+            safe = compiled.layer_name.replace("/", "_").replace(".", "_")
+            U_phases = compiled.U_mesh.get_phase_map()
+            Vh_phases = compiled.Vh_mesh.get_phase_map()
             np.savez_compressed(str(phases_dir / f"{safe}_U.npz"), **U_phases)
             np.savez_compressed(str(phases_dir / f"{safe}_Vh.npz"), **Vh_phases)
+            del U_phases, Vh_phases
+            # Free the large MZI object list; keep mesh object for netlist gen
+            compiled.U_mesh.result.mzis = []
+            compiled.Vh_mesh.result.mzis = []
+
             summary["layers"].append({
-                "name": cl.layer_name,
-                "chip_id_U": cl.chip_id_U,
-                "chip_id_Vh": cl.chip_id_Vh,
-                "n_mzis_U": cl.n_mzis_U,
-                "n_mzis_Vh": cl.n_mzis_Vh,
-                "error_svd": cl.reconstruction_error_svd,
-                "error_U": cl.reconstruction_error_clements_U,
-                "error_Vh": cl.reconstruction_error_clements_Vh,
-                "compilation_time_s": cl.compilation_time_s,
+                "name": compiled.layer_name,
+                "chip_id_U": compiled.chip_id_U,
+                "chip_id_Vh": compiled.chip_id_Vh,
+                "n_mzis_U": compiled.n_mzis_U,
+                "n_mzis_Vh": compiled.n_mzis_Vh,
+                "error_svd": compiled.reconstruction_error_svd,
+                "error_U": compiled.reconstruction_error_clements_U,
+                "error_Vh": compiled.reconstruction_error_clements_Vh,
+                "compilation_time_s": compiled.compilation_time_s,
                 "phase_file_U": f"phases/{safe}_U.npz",
                 "phase_file_Vh": f"phases/{safe}_Vh.npz",
             })
+            compiled_layers.append(compiled)
+            logger.info(f"  Saved phases → {safe}_U.npz / _Vh.npz")
+
+        summary["n_layers"] = len(compiled_layers)
+        summary["n_chips"] = mapper.total_chips()
+        summary["n_mzis"] = mapper.total_mzis()
 
         with open(output_path / "phase_map.json", "w") as f:
             json.dump(summary, f, indent=2)

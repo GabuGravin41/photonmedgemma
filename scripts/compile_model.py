@@ -314,6 +314,14 @@ def main():
         "--n-workers", type=int, default=1,
         help="Number of parallel workers for decomposition"
     )
+    parser.add_argument(
+        "--max-mesh-size", type=int, default=4096,
+        help=(
+            "Skip layers where max(m,n) exceeds this (default: 4096). "
+            "Clements is O(N^3): N=2048 ~1min, N=4096 ~10min, N=10240 ~2h. "
+            "Use 0 to disable limit (compile everything, may take many hours)."
+        )
+    )
     args = parser.parse_args()
 
     t_start = time.time()
@@ -353,7 +361,7 @@ def main():
 
         # Decompose
         decomposer = LayerDecomposer(rank=args.rank)
-        mapper = MZIMapper(dac_bits=args.dac_bits)
+        mapper = MZIMapper(dac_bits=args.dac_bits, max_mesh_size=args.max_mesh_size)
         encoder = PhaseEncoder(dac_bits=args.dac_bits)
         generator = NetlistGenerator(output_dir=str(output_path / "netlists"))
 
@@ -361,6 +369,8 @@ def main():
         for info, weight in layers:
             decomposed = decomposer.decompose(info, weight)
             compiled = mapper.map_layer(decomposed)
+            if compiled is None:
+                continue   # skipped due to max_mesh_size
             compiled_layers.append(compiled)
 
         # Encode and generate

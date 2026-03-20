@@ -89,16 +89,21 @@ class MZIMapper:
         mzis_per_chip: int = 4096,
         dac_bits: int = 12,
         wavelength: float = 1310e-9,
+        max_mesh_size: int = 4096,
     ):
         """
         Args:
             mzis_per_chip: Number of MZIs that fit on one chip (for resource tracking)
             dac_bits: DAC resolution for phase quantization
             wavelength: Operating wavelength [m]
+            max_mesh_size: Skip layers where max(m, n) exceeds this value.
+                           Clements is O(N^3); N=10240 takes ~2 hours, N=4096 ~10 min.
+                           Set to 0 to disable the limit.
         """
         self.mzis_per_chip = mzis_per_chip
         self.dac_bits = dac_bits
         self.wavelength = wavelength
+        self.max_mesh_size = max_mesh_size
 
         # Resource tracking state
         self._total_mzis = 0
@@ -128,6 +133,17 @@ class MZIMapper:
                 f"Mapping {info.name} ({decomposed.m}×{decomposed.n}, "
                 f"rank={decomposed.rank}) to MZI meshes..."
             )
+
+        # Skip layers that exceed the mesh size limit
+        if self.max_mesh_size > 0 and max(decomposed.m, decomposed.n) > self.max_mesh_size:
+            logger.warning(
+                f"  SKIPPED {info.name}: max dim {max(decomposed.m, decomposed.n)} "
+                f"> max_mesh_size {self.max_mesh_size}. "
+                f"(Clements for N={max(decomposed.m, decomposed.n)} is O(N^3) — "
+                f"use --max-mesh-size {max(decomposed.m, decomposed.n)} to include, "
+                f"or compile overnight.)"
+            )
+            return None  # type: ignore[return-value]
 
         # Decompose V† (n×n unitary)
         if verbose:

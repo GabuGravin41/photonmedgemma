@@ -373,13 +373,56 @@ def main():
                 continue   # skipped due to max_mesh_size
             compiled_layers.append(compiled)
 
-        # Encode and generate
-        phase_map = encoder.encode(compiled_layers, model_id=args.model, rank=args.rank)
-        phase_map.save_json(str(output_path / "phase_map.json"))
-        phase_map.save_binary(str(output_path / "phase_map.phcfg"))
+        # Save phase data as compressed numpy arrays (one file per layer).
+        # Bypasses PhaseEncoder.encode() which would create ~36M Python objects
+        # (~14GB RAM) for the full attention set — causing OOM kill.
+        phases_dir = output_path / "phases"
+        phases_dir.mkdir(exist_ok=True)
+
+        lsb_rad = 2 * np.pi / ((1 << args.dac_bits) - 1)
+        summary = {
+            "model_id": args.model,
+            "rank": args.rank,
+            "dac_bits": args.dac_bits,
+            "n_layers": len(compiled_layers),
+            "n_chips": mapper.total_chips(),
+            "n_mzis": mapper.total_mzis(),
+            "metadata": {
+                "dac_resolution_rad": lsb_rad,
+                "phase_rms_error_rad": lsb_rad / (2 * np.sqrt(3)),
+            },
+            "layers": [],
+        }
+
+        for cl in compiled_layers:
+            safe = cl.layer_name.replace("/", "_").replace(".", "_")
+            U_phases = cl.U_mesh.get_phase_map()
+            Vh_phases = cl.Vh_mesh.get_phase_map()
+            np.savez_compressed(str(phases_dir / f"{safe}_U.npz"), **U_phases)
+            np.savez_compressed(str(phases_dir / f"{safe}_Vh.npz"), **Vh_phases)
+            summary["layers"].append({
+                "name": cl.layer_name,
+                "chip_id_U": cl.chip_id_U,
+                "chip_id_Vh": cl.chip_id_Vh,
+                "n_mzis_U": cl.n_mzis_U,
+                "n_mzis_Vh": cl.n_mzis_Vh,
+                "error_svd": cl.reconstruction_error_svd,
+                "error_U": cl.reconstruction_error_clements_U,
+                "error_Vh": cl.reconstruction_error_clements_Vh,
+                "compilation_time_s": cl.compilation_time_s,
+                "phase_file_U": f"phases/{safe}_U.npz",
+                "phase_file_Vh": f"phases/{safe}_Vh.npz",
+            })
+
+        with open(output_path / "phase_map.json", "w") as f:
+            json.dump(summary, f, indent=2)
+        logger.info(
+            f"Saved phase map: {len(compiled_layers)} layers, "
+            f"{mapper.total_mzis():,} MZIs → {phases_dir}"
+        )
 
         generator.generate_full_model_netlist(compiled_layers)
-        generator.generate_json_manifest(compiled_layers, phase_map)
+        generator.generate_json_manifest(compiled_layers, phase_map=None)
 
         logger.info(mapper.resource_report())
         stats = {

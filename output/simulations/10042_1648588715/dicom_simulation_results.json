@@ -1,0 +1,73 @@
+{
+  "image_source": "10042_1648588715.png",
+  "preprocess": {
+    "target_size": 448,
+    "patch_size": 14,
+    "n_patches": 1024,
+    "patch_dim": 196,
+    "grid_h": 32,
+    "grid_w": 32
+  },
+  "n_tokens": 16,
+  "model_dim": 2560,
+  "phase_map": "output/real/phase_map.json",
+  "n_layers": 4,
+  "layers": [
+    {
+      "layer_name": "language_model.model.layers.0.self_attn.k_proj.weight",
+      "projection_type": "k_proj",
+      "chip_id_U": 2,
+      "chip_id_Vh": 1,
+      "rank": 64,
+      "n_tokens": 16,
+      "mean_relative_error": 8.523827976188384e-16,
+      "mean_cosine_similarity": 1.0,
+      "pass": true,
+      "error_svd": 0.8519355547305775
+    },
+    {
+      "layer_name": "language_model.model.layers.0.self_attn.o_proj.weight",
+      "projection_type": "o_proj",
+      "chip_id_U": 4,
+      "chip_id_Vh": 3,
+      "rank": 64,
+      "n_tokens": 16,
+      "mean_relative_error": 8.422905009280123e-16,
+      "mean_cosine_similarity": 1.0,
+      "pass": true,
+      "error_svd": 0.8741730375334175
+    },
+    {
+      "layer_name": "language_model.model.layers.0.self_attn.q_proj.weight",
+      "projection_type": "q_proj",
+      "chip_id_U": 6,
+      "chip_id_Vh": 5,
+      "rank": 64,
+      "n_tokens": 16,
+      "mean_relative_error": 8.534454928747921e-16,
+      "mean_cosine_similarity": 1.0,
+      "pass": true,
+      "error_svd": 0.8428599111189603
+    },
+    {
+      "layer_name": "language_model.model.layers.0.self_attn.v_proj.weight",
+      "projection_type": "v_proj",
+      "chip_id_U": 8,
+      "chip_id_Vh": 7,
+      "rank": 64,
+      "n_tokens": 16,
+      "mean_relative_error": 9.444890466995052e-16,
+      "mean_cosine_similarity": 1.0,
+      "pass": true,
+      "error_svd": 0.8437306613881751
+    }
+  ],
+  "kaggle_comparison": {},
+  "overall": {
+    "mean_error": 8.73151959530287e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  },
+  "elapsed_s": 69.1
+}

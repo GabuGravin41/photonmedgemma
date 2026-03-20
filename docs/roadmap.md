@@ -1,6 +1,6 @@
 # Project Roadmap
 
-## Phase 0: Foundation (Current — Q1 2026)
+## Phase 0: Foundation
 **Goal**: Complete compiler software, documentation, and simulation framework
 
 - [x] Project architecture and documentation
@@ -13,7 +13,7 @@
 - [ ] GDS layout generator (gdsfactory integration)
 - [ ] GitHub release and community launch
 
-## Phase 1: Single-Layer Demo Chip (Q3 2026)
+## Phase 1: Single-Layer Demo Chip 
 **Goal**: Fabricate and test a chip implementing one attention head, rank-64
 
 - [ ] Finalize chip design for AIM Photonics MPW run
@@ -24,7 +24,7 @@
 - [ ] Matrix-vector multiplication demonstration
 - [ ] Accuracy benchmarking vs software simulation
 
-## Phase 2: Full Transformer Layer (Q1 2027)
+## Phase 2: Full Transformer Layer
 **Goal**: Full single transformer layer on multi-chip module
 
 - [ ] All 7 weight matrices per layer (rank-128)
@@ -33,7 +33,7 @@
 - [ ] Layer-level inference throughput measurement
 - [ ] Energy efficiency measurement
 
-## Phase 3: Medical Inference System (Q4 2027)
+## Phase 3: Medical Inference System
 **Goal**: End-to-end MedGemma inference on photonic hardware
 
 - [ ] Full 46-layer language model (multi-tile system)
@@ -43,7 +43,7 @@
 - [ ] Latency and energy measurement vs A100 GPU
 - [ ] Pilot deployment at Kenyatta National Hospital
 
-## Phase 4: Product and Scale (2028+)
+## Phase 4: Product and Scale
 **Goal**: Manufacturable, deployable medical AI photonic chip
 
 - [ ] 3D photonic integration (reduced chip count)

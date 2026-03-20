@@ -1,0 +1,37 @@
+[
+  {
+    "image": "10011_1031443799.png",
+    "mean_error": 9.124102028161582e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  },
+  {
+    "image": "10025_893612858.png",
+    "mean_error": 9.124102028161582e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  },
+  {
+    "image": "10042_102733848.png",
+    "mean_error": 9.124102028161582e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  },
+  {
+    "image": "10042_1648588715.png",
+    "mean_error": 8.73151959530287e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  },
+  {
+    "image": "10042_495770405.png",
+    "mean_error": 9.124102028161582e-16,
+    "mean_cosine": 1.0,
+    "n_pass": 4,
+    "n_layers": 4
+  }
+]

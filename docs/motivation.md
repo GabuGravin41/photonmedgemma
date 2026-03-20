@@ -15,7 +15,7 @@ The leading AI companies — Google, Microsoft, OpenAI, Meta — have collective
 
 Beyond sustainability, there is a more immediate human problem: AI-powered medical intelligence is unavailable where it is needed most.
 
-In 2024, we worked directly with neurosurgeons at **Kenyatta National Hospital (KNH)** in Nairobi, Kenya — the largest referral hospital in East and Central Africa. The neurosurgery department serves a catchment of over 50 million people with a fraction of the specialists required. The needs were clear:
+In 2024, we worked directly with neurosurgeons at **Kenyatta National Hospital (KNH)** in Nairobi, Kenya — the largest referral hospital in East and Central Africa. The neurosurgery department serves a catchment of tens of thousands of Kenyans with a fraction of the specialists required. The needs were clear:
 
 1. **Smart triage**: automatically prioritizing patients with life-threatening conditions (cerebral hemorrhage, herniation) from CT scans.
 2. **Diagnostic assistance**: AI-assisted differential diagnosis for complex neurological presentations.

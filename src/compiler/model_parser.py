@@ -95,7 +95,8 @@ class ModelParser:
         self.model_id = model_id
         self.cache_dir = cache_dir or os.path.expanduser("~/.cache/photomedgemma")
         self.dtype = dtype
-        self._weights: Optional[Dict[str, np.ndarray]] = None
+        self._weights: Optional[Dict] = None
+        self._shard_index: Optional[Dict[str, Path]] = None
         self._config: Optional[dict] = None
 
     def load(self, local_path: Optional[str] = None) -> "ModelParser":
@@ -114,16 +115,14 @@ class ModelParser:
             self._load_from_huggingface()
 
         logger.info(
-            f"Loaded {len(self._weights)} weight tensors from {self.model_id}. "
-            f"Total parameters: {sum(np.prod(v.shape) for v in self._weights.values()):,}"
+            f"Indexed {len(self._weights)} tensors from {self.model_id} (lazy loading)."
         )
         return self
 
     def _load_from_huggingface(self):
-        """Load weights via HuggingFace hub (safetensors preferred)."""
+        """Download and index model weights from HuggingFace hub."""
         try:
             from huggingface_hub import snapshot_download
-            import safetensors.numpy as st
 
             logger.info(f"Downloading model {self.model_id}...")
             local_dir = snapshot_download(
@@ -135,13 +134,19 @@ class ModelParser:
 
         except ImportError:
             logger.warning(
-                "huggingface_hub or safetensors not installed. "
-                "Falling back to transformers."
+                "huggingface_hub not installed. Falling back to transformers."
             )
             self._load_via_transformers()
 
     def _load_from_local(self, path: str):
-        """Load weights from a local directory (safetensors format)."""
+        """
+        Index model shards for lazy loading.
+
+        Rather than loading all ~17GB of weights into RAM at once, we build a
+        tensor-name → shard-file index here. Actual tensor data is fetched
+        on-demand in iter_linear_layers() via safetensors.safe_open, so only
+        the tensors we actually compile are ever in memory simultaneously.
+        """
         path = Path(path)
 
         # Load model config
@@ -151,9 +156,9 @@ class ModelParser:
                 self._config = json.load(f)
 
         # Find all safetensors shards
-        shard_files = sorted(path.glob("*.safetensors"))
+        shard_files = sorted(path.glob("model*.safetensors"))
         if not shard_files:
-            shard_files = sorted(path.glob("model*.safetensors"))
+            shard_files = sorted(path.glob("*.safetensors"))
 
         if not shard_files:
             raise FileNotFoundError(
@@ -161,30 +166,41 @@ class ModelParser:
                 f"Ensure the model is downloaded correctly."
             )
 
-        logger.info(f"Loading {len(shard_files)} safetensors shards from {path}...")
+        logger.info(
+            f"Indexing {len(shard_files)} safetensors shards from {path} "
+            f"(lazy — weights loaded on demand)..."
+        )
 
-        # Use safetensors.torch backend: handles bfloat16 that numpy cannot
+        # Build tensor-name → shard-path index using only metadata (no data loaded)
         try:
-            import torch
-            from safetensors.torch import load_file as st_load
-
-            self._weights = {}
-            for shard in shard_files:
-                logger.debug(f"  Loading shard: {shard.name}")
-                tensors = st_load(str(shard))
-                for name, tensor in tensors.items():
-                    # Cast bfloat16 / float16 → float32 for SVD numerical stability
-                    self._weights[name] = tensor.to(torch.float32).numpy()
-
+            from safetensors import safe_open
         except ImportError:
-            # Fallback: safetensors.numpy (only works if model has no bfloat16 tensors)
-            from safetensors.numpy import load_file as st_np_load
-            self._weights = {}
-            for shard in shard_files:
-                logger.debug(f"  Loading shard: {shard.name}")
-                tensors = st_np_load(str(shard))
-                for name, tensor in tensors.items():
-                    self._weights[name] = tensor.astype(np.float32)
+            raise ImportError("safetensors not installed. Run: pip install safetensors")
+
+        self._shard_index: Dict[str, Path] = {}   # tensor name → shard file
+        total_tensors = 0
+        for shard in shard_files:
+            with safe_open(str(shard), framework="pt") as f:
+                for key in f.keys():
+                    self._shard_index[key] = shard
+                    total_tensors += 1
+
+        logger.info(
+            f"  Indexed {total_tensors} tensors across {len(shard_files)} shards. "
+            f"Peak RAM usage: <1MB (lazy index only)."
+        )
+
+        # Set _weights to sentinel so .load() log works; actual data via iter_linear_layers
+        self._weights = self._shard_index  # type: ignore[assignment]
+
+    def _fetch_tensor(self, name: str) -> np.ndarray:
+        """Load a single tensor from its shard file as float32 numpy array."""
+        import torch
+        from safetensors import safe_open
+
+        shard = self._shard_index[name]
+        with safe_open(str(shard), framework="pt") as f:
+            return f.get_tensor(name).to(torch.float32).numpy()
 
     def _load_via_transformers(self):
         """Fallback: load via HuggingFace transformers library."""
@@ -234,7 +250,32 @@ class ModelParser:
         if self._weights is None:
             raise RuntimeError("Call .load() before iterating layers.")
 
-        for name, weight in self._weights.items():
+        # Determine the set of tensor names to fetch.
+        # We use _shard_index if available (lazy path), otherwise fall back to
+        # the pre-loaded weight dict (e.g. when loaded via transformers).
+        index = getattr(self, "_shard_index", None) or self._weights
+
+        for name in sorted(index.keys()):
+            # Fast pre-filter on name to avoid fetching large non-compilable tensors
+            # (embeddings, lm_head, norms) — these can each be 2GB+ in float32.
+            if not self._is_compilable_name(name):
+                continue
+
+            # Layer-range pre-filter from name (avoids loading wrong-layer tensors)
+            if layer_range is not None:
+                layer_idx = self._layer_idx_from_name(name)
+                if layer_idx is not None:
+                    start, end = layer_range
+                    if not (start <= layer_idx < end):
+                        continue
+
+            # Fetch the actual tensor (lazy: only loads this one tensor from disk)
+            if self._shard_index is not None:
+                weight = self._fetch_tensor(name)
+                logger.debug(f"  Fetched {name}: {weight.shape}")
+            else:
+                weight = self._weights[name]  # type: ignore[index]
+
             info = self._classify_weight(name, weight.shape)
             if info is None:
                 continue
@@ -245,17 +286,36 @@ class ModelParser:
             if info.component == "vision_encoder" and not include_vision_encoder:
                 continue
 
-            # Filter by layer range
-            if layer_range is not None and info.transformer_layer_idx is not None:
-                start, end = layer_range
-                if not (start <= info.transformer_layer_idx < end):
-                    continue
-
-            # Only compile 2D weight matrices (not biases, not norms)
+            # Only compile 2D weight matrices
             if weight.ndim != 2:
                 continue
 
             yield info, weight
+
+    @staticmethod
+    def _is_compilable_name(name: str) -> bool:
+        """Fast string-based pre-filter: skip tensors we will never compile."""
+        # Skip embedding tables and output head (huge, not photonic targets)
+        if any(x in name for x in ("embed_tokens", "lm_head", "embeddings")):
+            return False
+        # Skip normalization scalars
+        if name.endswith((".weight",)) and any(x in name for x in ("norm.", "layernorm.")):
+            # Keep only weight matrices (2D); norms are usually 1D but we still pre-filter
+            return False
+        # Must contain a known projection keyword
+        PROJ_KEYWORDS = ("q_proj", "k_proj", "v_proj", "o_proj",
+                         "gate_proj", "up_proj", "down_proj",
+                         "out_proj", "fc1", "fc2")
+        return any(kw in name for kw in PROJ_KEYWORDS)
+
+    @staticmethod
+    def _layer_idx_from_name(name: str) -> Optional[int]:
+        """Extract transformer layer index from a tensor name, or None."""
+        import re
+        m = re.search(r"\.layers\.(\d+)\.", name)
+        if m:
+            return int(m.group(1))
+        return None
 
     def _classify_weight(
         self, name: str, shape: Tuple[int, ...]

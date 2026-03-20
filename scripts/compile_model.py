@@ -393,6 +393,12 @@ def main():
             if compiled is None:
                 continue   # skipped due to max_mesh_size
 
+            # ── Generate netlist BEFORE freeing MZI lists ─────────────────────
+            layer_netlist = generator.generate_layer_netlist(compiled)
+            netlist_path = output_path / "netlists" / "medgemma_photonic.pntl"
+            with open(netlist_path, "a") as nf:
+                nf.write(layer_netlist + "\n")
+
             # ── Save phases immediately, then free the heavy MZI lists ────────
             safe = compiled.layer_name.replace("/", "_").replace(".", "_")
             U_phases = compiled.U_mesh.get_phase_map()
@@ -400,7 +406,7 @@ def main():
             np.savez_compressed(str(phases_dir / f"{safe}_U.npz"), **U_phases)
             np.savez_compressed(str(phases_dir / f"{safe}_Vh.npz"), **Vh_phases)
             del U_phases, Vh_phases
-            # Free the large MZI object list; keep mesh object for netlist gen
+            # Free the large MZI object list — no longer needed
             compiled.U_mesh.result.mzis = []
             compiled.Vh_mesh.result.mzis = []
 
@@ -431,7 +437,7 @@ def main():
             f"{mapper.total_mzis():,} MZIs → {phases_dir}"
         )
 
-        generator.generate_full_model_netlist(compiled_layers)
+        # Netlist already written per-layer above; just write the manifest
         generator.generate_json_manifest(compiled_layers, phase_map=None)
 
         logger.info(mapper.resource_report())

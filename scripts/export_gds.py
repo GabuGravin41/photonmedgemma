@@ -370,23 +370,106 @@ def main():
         "--dac-bits", type=int, default=12,
         help="DAC resolution (must match compilation)"
     )
+    parser.add_argument(
+        "--max-mzis", type=int, default=4096,
+        help=(
+            "Max MZIs to render per chip GDS (default: 4096). "
+            "A full 2560×2560 mesh has 3.27M MZIs — KLayout cannot display that. "
+            "Use 0 for no limit (produces very large files)."
+        )
+    )
     args = parser.parse_args()
 
-    # ── Load phase map ─────────────────────────────────────────────────────────
-    logger.info(f"Loading phase map: {args.phase_map}")
-    phase_map = PhaseMap.load_json(args.phase_map)
-    logger.info(
-        f"  {len(phase_map.entries):,} entries, "
-        f"{len(set(e.chip_id for e in phase_map.entries))} chips"
-    )
-
+    phase_map_path = Path(args.phase_map)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Group entries by chip ─────────────────────────────────────────────────
+    # ── Load phase map — support both old (entries) and new (layers+npz) format
+    logger.info(f"Loading phase map: {phase_map_path}")
+    with open(phase_map_path) as f:
+        pm_data = json.load(f)
+
     by_chip: Dict[int, List[MZIPhaseEntry]] = {}
-    for e in phase_map.entries:
-        by_chip.setdefault(e.chip_id, []).append(e)
+    model_id = pm_data.get("model_id", "unknown")
+
+    if "entries" in pm_data:
+        # Old format: inline MZI entries
+        phase_map = PhaseMap.load_json(args.phase_map)
+        for e in phase_map.entries:
+            by_chip.setdefault(e.chip_id, []).append(e)
+        logger.info(
+            f"  {len(phase_map.entries):,} entries (old format), "
+            f"{len(by_chip)} chips"
+        )
+
+    else:
+        # New format: phases stored in per-layer NPZ files
+        base_dir = phase_map_path.parent
+        total_entries = 0
+        for layer in pm_data.get("layers", []):
+            for mesh_key, chip_id_key in [("phase_file_U", "chip_id_U"),
+                                           ("phase_file_Vh", "chip_id_Vh")]:
+                npz_rel = layer.get(mesh_key)
+                chip_id = layer.get(chip_id_key)
+                if npz_rel is None or chip_id is None:
+                    continue
+                npz_path = base_dir / npz_rel
+                if not npz_path.exists():
+                    logger.warning(f"  NPZ not found: {npz_path} — skipping")
+                    continue
+                data = np.load(str(npz_path))
+                rows      = data["row"].astype(int)
+                cols      = data["col"].astype(int)
+                th_dac    = data["theta_dac"].astype(int)
+                phi_dac   = data["phi_dac"].astype(int)
+                ps        = data["phase_screen_dac"].astype(int)  # phase screen
+                n = len(rows)
+                if args.max_mzis > 0:
+                    n = min(n, args.max_mzis)
+                mode_i = data["mode_i"].astype(int)
+                mode_j = data["mode_j"].astype(int)
+                theta_rad = data["theta"].astype(float)
+                phi_rad   = data["phi"].astype(float)
+                mtype = "U" if mesh_key == "phase_file_U" else "Vh"
+                lname = layer.get("name", "unknown")
+                for i in range(n):
+                    by_chip.setdefault(chip_id, []).append(
+                        MZIPhaseEntry(
+                            chip_id=chip_id,
+                            mzi_row=int(rows[i]),
+                            mzi_col=int(cols[i]),
+                            mode_i=int(mode_i[i]),
+                            mode_j=int(mode_j[i]),
+                            theta_rad=float(theta_rad[i]),
+                            phi_rad=float(phi_rad[i]),
+                            theta_dac=int(th_dac[i]),
+                            phi_dac=int(phi_dac[i]),
+                            layer_name=lname,
+                            matrix_type=mtype,
+                        )
+                    )
+                total_entries += n
+                # Phase screen entries (mzi_row = -1)
+                for idx, phase in enumerate(ps):
+                    by_chip.setdefault(chip_id, []).append(
+                        MZIPhaseEntry(
+                            chip_id=chip_id,
+                            mzi_row=-1,
+                            mzi_col=idx,
+                            mode_i=idx,
+                            mode_j=idx,
+                            theta_rad=float(phase) * 2 * np.pi / ((1 << args.dac_bits) - 1),
+                            phi_rad=0.0,
+                            theta_dac=int(phase),
+                            phi_dac=0,
+                            layer_name=lname,
+                            matrix_type=mtype,
+                        )
+                    )
+        logger.info(
+            f"  {total_entries:,} MZI entries loaded from NPZ (new format, "
+            f"capped at {args.max_mzis}/chip), {len(by_chip)} chips"
+        )
 
     chip_ids = sorted(by_chip.keys())
     if args.chip_id is not None:
@@ -412,7 +495,7 @@ def main():
     # ── Write manifest ─────────────────────────────────────────────────────────
     manifest_path = out_dir / "gds_manifest.json"
     manifest_data = {
-        "model_id":  phase_map.model_id,
+        "model_id":  model_id,
         "dac_bits":  args.dac_bits,
         "n_chips":   len(manifest),
         "total_mzis": sum(c["n_mzis"] for c in manifest),

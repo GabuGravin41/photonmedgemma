@@ -1,0 +1,16 @@
+{
+  "image": "10011_1031443799.png",
+  "stem": "10011_1031443799",
+  "n_input_tokens": 280,
+  "response": "Based on the provided image, I can see the following:\n\n*   **Normal Anatomy:** The image shows the typical anatomical structures of the breast, including the breast tissue, ribs, and the overall shape of the chest.\n*   **No Obvious Abnormalities:** There are no obvious masses, nodules, or other suspicious lesions that would immediately raise concern for a potential problem.\n\nHowever, it's important to note that this is a single image and a comprehensive assessment requires a full examination of the entire breast, including the skin, nipple, and surrounding tissues. A qualified radiologist or medical professional would need to review the image in the context of the patient's history, symptoms, and other relevant information to make a definitive diagnosis.",
+  "saved_files": [
+    "input_layer0_qproj_10011_1031443799.npy",
+    "output_layer0_qproj_10011_1031443799.npy",
+    "input_layer0_kproj_10011_1031443799.npy",
+    "output_layer0_kproj_10011_1031443799.npy",
+    "input_layer0_vproj_10011_1031443799.npy",
+    "output_layer0_vproj_10011_1031443799.npy",
+    "input_layer0_oproj_10011_1031443799.npy",
+    "output_layer0_oproj_10011_1031443799.npy"
+  ]
+}

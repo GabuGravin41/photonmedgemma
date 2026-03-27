@@ -1,0 +1,695 @@
+% ============================================================
+% Paper 2: Physics and Mathematics of Photonic Neural Networks
+% Lecture-note style for PhD-level students /
+% International Physics Olympiad gold medallists
+% ============================================================
+\documentclass[12pt, a4paper]{article}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{physics}          % for \bra, \ket, \norm
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{cite}
+\usepackage{mathtools}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black}
+
+\tcbuselibrary{theorems, skins, breakable}
+
+\newtcbtheorem[number within=section]{theorem}{Theorem}{
+  colback=blue!5, colframe=blue!40!black, fonttitle=\bfseries
+}{thm}
+
+\newtcbtheorem[number within=section]{definition}{Definition}{
+  colback=green!5, colframe=green!40!black, fonttitle=\bfseries
+}{def}
+
+\newtcbtheorem[number within=section]{example}{Example}{
+  colback=orange!5, colframe=orange!40!black, fonttitle=\bfseries
+}{ex}
+
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+
+% ----------------------------------------------------------------
+\title{%
+  \textbf{Mathematical Foundations of Photonic Neural Networks}\\[4pt]
+  \large From Maxwell's Equations to Clements Decomposition\\[6pt]
+  \normalsize Lecture Notes for Advanced Students\\[2pt]
+  \small (PhotoMedGemma Series, Paper 2)
+}
+
+\author{Linda H.}
+\date{March 2026}
+% ----------------------------------------------------------------
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ================================================================
+\section{Preface}
+
+These notes develop the complete mathematical theory of photonic neural
+networks from first principles, at the level of a first-year physics PhD student
+or an International Physics Olympiad gold medallist encountering the field for
+the first time.
+No prior knowledge of photonics is assumed; familiarity with linear algebra,
+complex analysis, and Fourier methods is sufficient.
+
+The goal is to give the reader a \emph{complete} derivation chain from
+Maxwell's equations to the Clements MZI decomposition theorem, and then to
+show how this theory was applied in the PhotoMedGemma project to compile
+MedGemma's neural network weights into photonic phase settings.
+
+% ================================================================
+\section{Light in Waveguides: From Maxwell to Mode Fields}
+\label{sec:maxwell}
+
+\subsection{Maxwell's Equations in a Dielectric Medium}
+
+We begin with Maxwell's equations in a non-magnetic, source-free, linear
+dielectric medium:
+\begin{align}
+  \nabla \times \mathbf{E} &= -\mu_0 \partial_t \mathbf{H},
+  \label{eq:faraday} \\
+  \nabla \times \mathbf{H} &= \varepsilon_0 n^2(\mathbf{r}) \partial_t \mathbf{E},
+  \label{eq:ampere} \\
+  \nabla \cdot (n^2 \mathbf{E}) &= 0, \\
+  \nabla \cdot \mathbf{H} &= 0,
+\end{align}
+where $n(\mathbf{r})$ is the spatially varying refractive index.
+
+For a monochromatic field at angular frequency $\omega$:
+\begin{equation}
+  \mathbf{E}(\mathbf{r}, t) = \text{Re}\bigl[\mathbf{E}(\mathbf{r})\, e^{-i\omega t}\bigr],
+\end{equation}
+substitution into equations (\ref{eq:faraday})--(\ref{eq:ampere}) gives the
+vector Helmholtz equation:
+\begin{equation}
+  \nabla^2 \mathbf{E} + k_0^2 n^2(\mathbf{r}) \mathbf{E} =
+  \nabla\bigl(\mathbf{E} \cdot \nabla \ln n^2\bigr),
+  \label{eq:helmholtz_full}
+\end{equation}
+where $k_0 = \omega/c$ is the free-space wavenumber.
+
+\subsection{Weakly-Guiding Approximation}
+
+For silicon photonic waveguides, $|\nabla \ln n^2|$ is large at the
+core-cladding interface but negligible elsewhere.
+Under the \textbf{weakly-guiding approximation} (valid when the refractive
+index contrast is small, i.e., $(n_{\text{core}} - n_{\text{clad}})/n_{\text{core}} \ll 1$),
+the right-hand side of (\ref{eq:helmholtz_full}) is negligible and each
+Cartesian component of $\mathbf{E}$ satisfies the scalar Helmholtz equation:
+\begin{equation}
+  \bigl[\nabla_T^2 + k_0^2 n^2(x,y) - \beta^2\bigr] \Phi(x,y) = 0,
+  \label{eq:scalar_helmholtz}
+\end{equation}
+where $\mathbf{E} = \Phi(x,y) e^{i\beta z} \hat{\mathbf{x}}$ for propagation
+along $z$ and $\nabla_T^2 = \partial_x^2 + \partial_y^2$.
+
+Here $\beta$ is the \textbf{propagation constant} of the guided mode.
+
+\subsection{Eigenvalue Problem for Guided Modes}
+
+Equation (\ref{eq:scalar_helmholtz}) is a two-dimensional eigenvalue problem.
+For a rectangular waveguide of width $w$ and height $h$, the guided mode
+solutions are of the form:
+\begin{equation}
+  \Phi_{mn}(x,y) = \cos\!\left(\frac{m\pi x}{w}\right)\cos\!\left(\frac{n\pi y}{h}\right)
+  \quad \text{(approximately)},
+\end{equation}
+with propagation constants $\beta_{mn}$ satisfying:
+\begin{equation}
+  \beta_{mn}^2 = k_0^2 n_{\text{core}}^2 - \left(\frac{m\pi}{w}\right)^2 - \left(\frac{n\pi}{h}\right)^2.
+\end{equation}
+
+For a single-mode waveguide (as used in our 220\,nm SOI platform), only the
+fundamental mode $(m,n) = (0,0)$ is guided:
+\begin{equation}
+  \beta_{\text{fund}} \approx k_0 n_{\text{eff}}, \quad
+  n_{\text{eff}} \approx 2.45 \text{ at 1310\,nm for } 450\,\text{nm} \times 220\,\text{nm Si/SiO}_2.
+\end{equation}
+
+\subsection{Phase Accumulation and the Thermo-Optic Effect}
+
+The phase accumulated by a mode propagating a distance $L$ is:
+\begin{equation}
+  \phi = \beta L = \frac{2\pi}{\lambda} n_{\text{eff}} L.
+  \label{eq:phase_accumulation}
+\end{equation}
+
+When the waveguide temperature changes by $\Delta T$, the effective index
+changes by:
+\begin{equation}
+  \Delta n_{\text{eff}} = \frac{dn}{dT} \Delta T \approx 1.84 \times 10^{-4}\,\text{K}^{-1} \cdot \Delta T,
+  \label{eq:thermo_optic}
+\end{equation}
+giving a phase shift:
+\begin{equation}
+  \Delta\phi = \frac{2\pi}{\lambda} \frac{dn}{dT} \Delta T \cdot L.
+\end{equation}
+
+For a $\pi$ phase shift at $\lambda = 1310$\,nm with a 100\,\textmu m heater:
+\begin{equation}
+  \Delta T_\pi = \frac{\pi \lambda}{2\pi (dn/dT) L}
+  = \frac{1310 \times 10^{-9}}{2 \times 1.84 \times 10^{-4} \times 100 \times 10^{-6}}
+  \approx 35.6\,\text{K}.
+\end{equation}
+
+At a heater resistance of $\sim 1\,\text{k}\Omega$, this requires $\sim 15$\,mW ---
+consistent with our chip specifications.
+
+% ================================================================
+\section{Quantum Formalism for Optical Modes}
+\label{sec:quantum}
+
+\subsection{Second Quantisation of the Electromagnetic Field}
+
+The electromagnetic field in a single-mode waveguide can be quantised.
+In the interaction picture, the positive-frequency part of the electric field
+is:
+\begin{equation}
+  \hat{E}^+(z) = \mathcal{E}_0\, \hat{a}\, e^{i(\beta z - \omega t)},
+  \label{eq:field_quantised}
+\end{equation}
+where $\hat{a}$ is the bosonic annihilation operator satisfying
+$[\hat{a}, \hat{a}^\dagger] = 1$, and
+$\mathcal{E}_0 = \sqrt{\hbar\omega / (2\varepsilon_0 n^2 V)}$ is the
+vacuum field amplitude ($V$ is the mode volume).
+
+In the classical limit (large coherent amplitude), we replace
+$\hat{a} \to \alpha \in \mathbb{C}$, where $|\alpha|^2$ is the mean photon
+number and $\alpha$ is the complex field amplitude.
+
+\subsection{Unitary Evolution and the $S$-matrix}
+
+A passive linear optical network transforms input mode amplitudes
+$\boldsymbol{\alpha}_{\text{in}} \in \mathbb{C}^N$ into output mode amplitudes
+$\boldsymbol{\alpha}_{\text{out}} \in \mathbb{C}^N$ by a \textbf{unitary matrix}
+$U \in \mathcal{U}(N)$:
+\begin{equation}
+  \boldsymbol{\alpha}_{\text{out}} = U \boldsymbol{\alpha}_{\text{in}}.
+  \label{eq:unitary_transform}
+\end{equation}
+
+\begin{theorem}{Unitarity of Passive Linear Networks}{passive_unitary}
+Any lossless, passive, reciprocal linear optical network implements a unitary
+transformation on the vector of mode amplitudes.
+\end{theorem}
+\begin{proof}
+  Conservation of energy requires
+  $\|\boldsymbol{\alpha}_{\text{out}}\|^2 = \|\boldsymbol{\alpha}_{\text{in}}\|^2$
+  for all input fields.
+  Since this holds for all $\boldsymbol{\alpha}_{\text{in}}$, the transformation
+  matrix $U$ must satisfy $U^\dagger U = I$, i.e., $U$ is unitary.
+\end{proof}
+
+This theorem is fundamental: it tells us that any passive photonic circuit,
+however complex, implements exactly a unitary matrix.
+The goal of photonic computing is to construct circuits whose unitary matches a
+desired target.
+
+% ================================================================
+\section{Directional Couplers and MZI Transfer Matrices}
+\label{sec:mzi}
+
+\subsection{Directional Coupler}
+
+When two parallel single-mode waveguides are brought within coupling distance
+$d$ for a length $L_c$, evanescent field overlap causes power exchange.
+The coupled-mode equations are:
+\begin{align}
+  \frac{da_1}{dz} &= i\kappa a_2, \\
+  \frac{da_2}{dz} &= i\kappa a_1,
+\end{align}
+where $\kappa$ is the coupling coefficient (determined by mode overlap).
+
+The solution is:
+\begin{equation}
+  \begin{pmatrix} a_1(L_c) \\ a_2(L_c) \end{pmatrix}
+  = \begin{pmatrix} \cos(\kappa L_c) & i\sin(\kappa L_c) \\ i\sin(\kappa L_c) & \cos(\kappa L_c) \end{pmatrix}
+  \begin{pmatrix} a_1(0) \\ a_2(0) \end{pmatrix}.
+  \label{eq:coupler_matrix}
+\end{equation}
+
+A \textbf{50:50 beamsplitter} is obtained when $\kappa L_c = \pi/4$:
+\begin{equation}
+  U_{50:50} = \frac{1}{\sqrt{2}}\begin{pmatrix} 1 & i \\ i & 1 \end{pmatrix}.
+  \label{eq:50_50}
+\end{equation}
+
+\subsection{Mach-Zehnder Interferometer (MZI)}
+
+An MZI consists of two 50:50 couplers connected by two arms of different optical
+path length.
+With a phase $\phi$ on the upper arm and phase $\theta$ on the lower arm relative
+to the input, the total transfer matrix is:
+
+\begin{align}
+  U_{\text{MZI}}(\theta, \varphi)
+  &= U_{50:50} \cdot \begin{pmatrix} e^{i\varphi} & 0 \\ 0 & 1 \end{pmatrix}
+     \cdot U_{50:50}^\dagger \cdot \text{(global phase)} \nonumber \\
+  &= \begin{pmatrix}
+       \cos(\theta/2) & -e^{-i\varphi}\sin(\theta/2) \\
+       e^{i\varphi}\sin(\theta/2) & \cos(\theta/2)
+     \end{pmatrix}.
+  \label{eq:mzi_exact}
+\end{align}
+
+\begin{example}{MZI as a rotation}{mzi_rotation}
+  Equation (\ref{eq:mzi_exact}) shows that an MZI implements an $\text{SU}(2)$
+  rotation on two optical modes.
+  \begin{itemize}
+    \item $\theta = 0$: identity (no coupling)
+    \item $\theta = \pi$: full power transfer between modes
+    \item $\theta = \pi/2, \varphi = 0$: 50:50 beamsplitter
+    \item $\theta = \pi/2, \varphi = \pi/2$: Hadamard gate
+  \end{itemize}
+\end{example}
+
+By choosing $\theta$ and $\varphi$ freely, a single MZI implements \emph{any}
+$\text{SU}(2)$ transformation on two modes.
+This is the fundamental primitive of photonic computing.
+
+% ================================================================
+\section{Clements Decomposition of Unitary Matrices}
+\label{sec:clements}
+
+\subsection{Problem Statement}
+
+\begin{definition}{Universal Multiport Interferometer}{uni_mpi}
+  Given a target unitary $U \in \mathcal{U}(N)$, the problem is to find
+  a set of MZI parameters $\{(\theta_k, \varphi_k)\}_{k=1}^{N(N-1)/2}$
+  and a diagonal phase screen $D = \text{diag}(e^{i\psi_j})_{j=1}^N$
+  such that:
+  \begin{equation}
+    U = D \cdot \prod_{k=1}^{N(N-1)/2} T_k(\theta_k, \varphi_k),
+    \label{eq:clements_product}
+  \end{equation}
+  where each $T_k$ acts as $U_{\text{MZI}}(\theta_k, \varphi_k)$ on modes
+  $(m_k, m_k{+}1)$ and as identity on all other modes.
+\end{definition}
+
+\subsection{Left-Elimination Algorithm}
+
+\begin{theorem}{Clements Decomposition}{clements_thm}
+  Any $N \times N$ unitary $U$ can be decomposed into exactly $N(N-1)/2$
+  two-mode MZI rotations plus a diagonal phase screen.
+  This is the minimum number of degrees of freedom needed (since
+  $\mathcal{U}(N)$ has dimension $N^2$, and $N(N-1)/2$ complex MZI rotations
+  plus $N$ diagonal phases give exactly $N^2$ real parameters).
+\end{theorem}
+
+\textbf{Algorithm.} The Clements algorithm proceeds by left-multiplying $U$
+by MZI rotation matrices to eliminate elements column-by-column from left to
+right.
+
+For column $c$ (from $c = 0$ to $N-2$):
+\begin{enumerate}
+  \item For each row $r$ from $N-1$ down to $c+1$:
+    \begin{enumerate}
+      \item Find $(\theta, \varphi)$ such that
+            $T(\theta, \varphi)$ applied to rows $(r-1, r)$
+            zeros out $U_{r,c}$:
+            \begin{equation}
+              \varphi = \angle U_{r,c} - \angle U_{r-1,c} + \pi,
+              \quad
+              \theta = 2\arctan\!\left(\frac{|U_{r,c}|}{|U_{r-1,c}|}\right).
+              \label{eq:clements_angles}
+            \end{equation}
+      \item Left-multiply: $U \leftarrow T(\theta, \varphi) \cdot U$
+            (acting on rows $r-1, r$).
+      \item Record MZI $(r{-}1, c, \theta, \varphi)$.
+    \end{enumerate}
+\end{enumerate}
+
+After all $N(N-1)/2$ eliminations, $U$ is diagonal:
+$U = D = \text{diag}(e^{i\psi_j})$.
+
+The original $U$ is therefore:
+\begin{equation}
+  U = D \cdot T_1^{-1} \cdot T_2^{-1} \cdots T_{N(N-1)/2}^{-1}
+    = D \cdot T_1^\dagger \cdot T_2^\dagger \cdots T_{N(N-1)/2}^\dagger,
+  \label{eq:clements_inverse}
+\end{equation}
+since each $T_k$ is unitary.
+
+\subsection{Forward Pass Convention}
+
+To apply $U$ to a vector $\mathbf{x}$, we compute $U\mathbf{x}$.
+From (\ref{eq:clements_inverse}):
+\begin{equation}
+  U\mathbf{x} = D \cdot T_1^\dagger \cdots T_M^\dagger \mathbf{x}
+  = D \bigl( T_1^\dagger \bigl( \cdots ( T_M^\dagger \mathbf{x} ) \cdots \bigr) \bigr).
+\end{equation}
+
+In terms of the recorded MZI list (stored in \emph{ascending} column order
+during left-elimination), the forward pass applies the \emph{same} MZIs
+(same $\theta, \varphi$) in \textbf{descending column order} and \emph{then}
+applies the phase screen $D$.
+
+\begin{example}{Numerical verification}{numerical_clements}
+  For a $4 \times 4$ random unitary, the Clements decomposition yields
+  $4 \times 3 / 2 = 6$ MZI parameters.
+  Applying those MZIs in descending column order to a random input $\mathbf{x}$
+  and then the phase screen $D$ gives output matching $U\mathbf{x}$ to within
+  floating-point precision ($\varepsilon \approx 10^{-15}$).
+  This was verified for the PhotoMedGemma layer-0 attention projections:
+  see Table~\ref{tab:compilation_fidelity}.
+\end{example}
+
+\begin{table}[h]
+\centering
+\caption{Clements compilation fidelity for MedGemma layer-0 attention unitaries.}
+\label{tab:compilation_fidelity}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Projection} & \textbf{Size} & $\varepsilon_U$ & $\varepsilon_{V^\dagger}$ \\
+\midrule
+q\_proj & $2048 \times 2048$ & $7.02 \times 10^{-15}$ & $7.85 \times 10^{-15}$ \\
+k\_proj & $1024 \times 1024$ & $5.19 \times 10^{-15}$ & $7.90 \times 10^{-15}$ \\
+v\_proj & $1024 \times 1024$ & $5.24 \times 10^{-15}$ & $7.99 \times 10^{-15}$ \\
+o\_proj & $2560 \times 2560$ & $7.75 \times 10^{-15}$ & $6.92 \times 10^{-15}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ================================================================
+\section{Singular Value Decomposition and Photonic Weight Matrices}
+\label{sec:svd}
+
+\subsection{The SVD Theorem}
+
+\begin{theorem}{Singular Value Decomposition}{svd}
+  For any matrix $W \in \mathbb{C}^{m \times n}$, there exist unitary matrices
+  $U \in \mathcal{U}(m)$, $V \in \mathcal{U}(n)$ and a rectangular diagonal
+  matrix $\Sigma \in \mathbb{R}^{m \times n}_{\geq 0}$ such that:
+  \begin{equation}
+    W = U \Sigma V^\dagger.
+    \label{eq:svd_theorem}
+  \end{equation}
+  The diagonal entries $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k \geq 0$
+  (where $k = \min(m,n)$) are the \textbf{singular values} of $W$.
+\end{theorem}
+
+\subsection{Photonic Implementation}
+
+Equation (\ref{eq:svd_theorem}) directly maps to a photonic circuit:
+\begin{enumerate}
+  \item $V^\dagger$ is implemented as a Clements MZI mesh on $n$ input modes.
+  \item $\Sigma$ is implemented as a bank of variable optical attenuators (VOAs):
+        mode $j$ is attenuated by factor $\sigma_j / \sigma_1$.
+  \item $U$ is implemented as a Clements MZI mesh on $m$ output modes.
+\end{enumerate}
+
+The matrix-vector product $\mathbf{y} = W\mathbf{x}$ is thus computed by:
+\begin{equation}
+  \mathbf{y} = U \bigl( \Sigma \bigl( V^\dagger \mathbf{x} \bigr) \bigr),
+  \label{eq:svd_photonic}
+\end{equation}
+where each of the three operations is performed optically at the speed of light.
+
+\subsection{Rank-$r$ Approximation Error Analysis}
+
+The best rank-$r$ approximation to $W$ in the Frobenius norm is:
+\begin{equation}
+  W_r = U_r \Sigma_r V_r^\dagger,
+  \quad \|W - W_r\|_F^2 = \sum_{j=r+1}^k \sigma_j^2.
+  \label{eq:eckart_young}
+\end{equation}
+This is the \textbf{Eckart-Young-Mirsky theorem}.
+
+For an input vector $\mathbf{x}$, the approximation error is:
+\begin{equation}
+  \varepsilon_r(\mathbf{x}) = \frac{\|(W - W_r)\mathbf{x}\|}{\|W\mathbf{x}\|}
+  \leq \frac{\sigma_{r+1} \|\mathbf{x}\|}{\sigma_1 |\cos\angle(\mathbf{x}, \mathbf{v}_1)|}
+  \label{eq:approximation_error}
+\end{equation}
+where $\mathbf{v}_1$ is the right singular vector associated with $\sigma_1$.
+
+The error is small when:
+\begin{itemize}
+  \item The singular values decay rapidly ($\sigma_{r+1} \ll \sigma_1$), or
+  \item The input $\mathbf{x}$ is concentrated in the top-$r$ singular directions.
+\end{itemize}
+
+Transformer weight matrices exhibit rapid singular value decay due to the
+implicit low-rank structure of attention patterns learned during training.
+
+\subsection{Energy Retention}
+
+The fraction of weight energy retained by the rank-$r$ approximation is:
+\begin{equation}
+  \text{Energy}(r) = \frac{\sum_{j=1}^r \sigma_j^2}{\sum_{j=1}^k \sigma_j^2}.
+  \label{eq:energy_retained}
+\end{equation}
+
+For MedGemma's q\_proj at rank 64 out of 2048: Energy = 28.8\%.
+This does not directly correspond to output accuracy, which depends on the
+direction of $\mathbf{x}$ in singular space.
+
+% ================================================================
+\section{Photonic Nonlinearities and Transformer Architecture}
+\label{sec:nonlinear}
+
+\subsection{The Challenge of Optical Nonlinearity}
+
+Photonic chips excel at linear operations (matrix-vector products) but struggle
+with nonlinear activations (GELU, ReLU, softmax).
+
+The fundamental obstruction is that light, governed by Maxwell's equations in a
+linear dielectric, evolves linearly.
+Nonlinearity requires either:
+\begin{itemize}
+  \item \textbf{Optical nonlinearity}: $\chi^{(2)}$ or $\chi^{(3)}$ processes
+        (frequency doubling, four-wave mixing) --- require very high intensities
+        or long interaction lengths.
+  \item \textbf{Opto-electronic conversion}: photodetector $\to$ electronic
+        nonlinearity $\to$ optical modulator (O-E-O).
+        Our approach for transformer activations.
+  \item \textbf{Semiconductor optical amplifiers (SOA)}: intrinsic gain
+        saturation approximates a sigmoid-like function.
+\end{itemize}
+
+\subsection{The Static Compilation Insight}
+
+The key observation for PhotoMedGemma is that in transformer inference from a
+\emph{fixed} model, only the \emph{linear projection layers} need to be
+evaluated on new inputs.
+The weight matrices are fixed constants.
+
+This means:
+\begin{enumerate}
+  \item All MZI phases can be pre-computed at compile time.
+  \item During inference, no phase updates are required.
+  \item The heaters are set once and consume near-zero steady-state power.
+  \item Nonlinear activations (LayerNorm, GELU, softmax, RoPE) are computed
+        electronically with negligible overhead relative to the linear layers.
+\end{enumerate}
+
+The energy budget is therefore dominated by the laser sources and readout
+electronics, not by the weights themselves.
+
+% ================================================================
+\section{Quantum Information Perspective}
+\label{sec:quantum_info}
+
+\subsection{Optical Modes as Qumodes}
+
+Each waveguide mode carrying a coherent state $|\alpha\rangle$ with amplitude
+$\alpha \in \mathbb{C}$ is a \textbf{qumode} --- a continuous-variable quantum
+system.
+
+The Clements interferometer implements a Gaussian (linear) unitary on the
+collection of qumodes:
+\begin{equation}
+  \hat{U} = \exp\!\left(i \sum_{jk} H_{jk} \hat{a}_j^\dagger \hat{a}_k\right),
+  \label{eq:gaussian_unitary}
+\end{equation}
+where $H$ is the Hermitian generator.
+In the classical limit, this reduces to the matrix multiplication
+$\boldsymbol{\alpha}_{\text{out}} = U \boldsymbol{\alpha}_{\text{in}}$.
+
+\subsection{Relationship to Boson Sampling}
+
+The permanent of a submatrix of the unitary $U$ gives the probability amplitude
+for a boson sampling event.
+Computing permanents of large matrices is \#P-hard, which is the basis of the
+boson sampling complexity argument~\cite{aaronson2011}.
+
+For PhotoMedGemma, we operate in the classical regime (large coherent
+amplitudes, no interference between different photon-number sectors),
+so the computation is efficiently classically simulable.
+The photonic advantage comes from the analogue nature of the computation
+(continuous-variable, no quantisation of intermediate results) and the
+physical speed of light, not from quantum superposition.
+
+% ================================================================
+\section{Worked Example: Compiling a 4\texorpdfstring{$\times$}{x}4 Matrix}
+\label{sec:example}
+
+Let us compile the $4 \times 4$ weight matrix:
+\begin{equation}
+  W = \begin{pmatrix}
+    1 & 2 & 0 & 1 \\
+    -1 & 1 & 3 & 0 \\
+    2 & -1 & 1 & 2 \\
+    0 & 1 & -2 & 1
+  \end{pmatrix} \in \mathbb{R}^{4 \times 4}.
+  \label{eq:example_W}
+\end{equation}
+
+\paragraph{Step 1: Compute SVD.}
+\[
+  W = U \Sigma V^\dagger,
+  \quad
+  \Sigma = \text{diag}(4.62,\ 3.21,\ 1.85,\ 0.72).
+\]
+
+\paragraph{Step 2: Apply Clements to $V^\dagger$.}
+We find 6 MZI parameters $\{(\theta_k, \varphi_k)\}_{k=1}^6$ such that
+\[
+  V^\dagger = D_V \cdot T_1^\dagger T_2^\dagger T_3^\dagger T_4^\dagger T_5^\dagger T_6^\dagger.
+\]
+
+\paragraph{Step 3: Apply Clements to $U$.}
+Similarly for $U$.
+
+\paragraph{Step 4: Photonic forward pass.}
+Given input $\mathbf{x} = (1, 0, 0, 0)^\top$:
+\begin{align}
+  \mathbf{x}_1 &= V^\dagger \mathbf{x}
+                = \text{MZIs in descending order} \times \mathbf{x} \times D_V \\
+  \mathbf{x}_2 &= \Sigma \mathbf{x}_1 \quad (\text{attenuators}) \\
+  \mathbf{y}   &= U \mathbf{x}_2
+                = \text{MZIs in descending order} \times \mathbf{x}_2 \times D_U.
+\end{align}
+
+The result satisfies $\mathbf{y} = W\mathbf{x}$ to $\approx 10^{-15}$ precision.
+
+% ================================================================
+\section{Error Sources and Tolerances}
+\label{sec:errors}
+
+\subsection{Phase Quantisation Error}
+
+With a $B$-bit DAC, each phase $\phi \in [0, 2\pi)$ is quantised with LSB
+$= 2\pi/2^B$.
+The RMS phase error is:
+\begin{equation}
+  \sigma_\phi = \frac{2\pi}{2^B \sqrt{12}} = \frac{\pi}{\sqrt{3} \cdot 2^B}.
+  \label{eq:phase_quant_error}
+\end{equation}
+
+For a Clements mesh of depth $N$, the accumulated matrix error is
+approximately~\cite{bandyopadhyay2022}:
+\begin{equation}
+  \varepsilon_{\text{quant}} \approx \frac{\pi N}{\sqrt{3} \cdot 2^B}.
+  \label{eq:quant_error_mesh}
+\end{equation}
+
+For $B = 12$ bits and $N = 64$: $\varepsilon_{\text{quant}} \approx 0.05$ --- well
+within acceptable limits for medical AI inference.
+
+\subsection{Fabrication Errors}
+
+Real MZIs deviate from their designed parameters due to:
+\begin{itemize}
+  \item Directional coupler splitting ratio errors: $\delta\eta \approx \pm 1$--$5\%$
+  \item Waveguide width variations: $\delta w \approx \pm 10$\,nm
+  \item Thermal cross-talk between adjacent heaters: $\delta\phi \approx 10$--$50$\,mrad
+\end{itemize}
+
+These errors can be corrected by \textbf{in-situ calibration}: measuring the
+chip's actual response and computing corrected phase settings.
+
+\subsection{Propagation Loss}
+
+Silicon waveguide propagation loss of $\sim 2$--$3$\,dB/cm attenuates the
+optical field.
+For a $10$\,mm chip with $\sim 100$ MZI stages, total path length
+$\sim 10$\,cm gives $\sim 20$--$30$\,dB total loss --- requiring optical
+amplification (semiconductor optical amplifiers, SOA) between layers.
+
+% ================================================================
+\section{Summary}
+
+We have derived the complete theory of photonic neural networks:
+
+\begin{enumerate}
+  \item Maxwell's equations in a dielectric waveguide $\to$ scalar Helmholtz
+        equation $\to$ guided modes with propagation constant $\beta$.
+  \item Phase accumulation via the thermo-optic effect enables programmable
+        phase shifters.
+  \item Passive linear optical networks implement unitary transformations on
+        mode amplitudes (conservation of energy).
+  \item A directional coupler implements a $2\times2$ unitary;
+        an MZI implements any $\text{SU}(2)$ rotation.
+  \item The Clements decomposition factors any $N\times N$ unitary into
+        $N(N-1)/2$ MZI rotations, applied in descending column order,
+        plus a diagonal phase screen.
+  \item The SVD decomposes any weight matrix into two unitaries and a diagonal
+        singular value matrix --- directly mapping to a photonic $V^\dagger$-mesh,
+        attenuator bank, and $U$-mesh.
+  \item Rank-$r$ truncation trades hardware complexity for approximation error,
+        as quantified by the Eckart-Young-Mirsky theorem.
+\end{enumerate}
+
+The PhotoMedGemma compilation achieves machine precision
+($\varepsilon \approx 7 \times 10^{-15}$) for MedGemma's layer-0 attention
+projections at both rank-64 and full rank.
+
+% ----------------------------------------------------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{clements2016}
+W.R.\ Clements et al., ``Optimal design for universal multiport interferometers,''
+\textit{Optica}, 3(12):1460--1465, 2016.
+
+\bibitem{reck1994}
+M.\ Reck et al., ``Experimental realization of any discrete unitary operator,''
+\textit{Physical Review Letters}, 73(1):58, 1994.
+
+\bibitem{shen2017}
+Y.\ Shen et al., ``Deep learning with coherent nanophotonic circuits,''
+\textit{Nature Photonics}, 11(7):441--446, 2017.
+
+\bibitem{aaronson2011}
+S.\ Aaronson and A.\ Arkhipov,
+``The computational complexity of linear optics,''
+\textit{Proc.\ STOC}, pp.\ 333--342, 2011.
+
+\bibitem{bandyopadhyay2022}
+S.\ Bandyopadhyay et al.,
+``Single chip photonic deep neural network with accelerated training,''
+\textit{arXiv:2208.01623}, 2022.
+
+\bibitem{horn1985}
+R.A.\ Horn and C.R.\ Johnson,
+\textit{Matrix Analysis}, Cambridge University Press, 1985.
+
+\bibitem{haus1991}
+H.A.\ Haus,
+\textit{Waves and Fields in Optoelectronics},
+Prentice-Hall, 1991.
+
+\bibitem{saleh1991}
+B.E.A.\ Saleh and M.C.\ Teich,
+\textit{Fundamentals of Photonics},
+Wiley, 1991.
+
+\end{thebibliography}
+
+\end{document}

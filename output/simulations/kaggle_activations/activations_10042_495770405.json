@@ -1,0 +1,16 @@
+{
+  "image": "10042_495770405.png",
+  "stem": "10042_495770405",
+  "n_input_tokens": 280,
+  "response": "Based on the image provided, there are no obvious abnormalities visible. The image appears to be a standard mammogram, and the breast tissue appears relatively normal in density and distribution. There are no obvious masses, calcifications, or other suspicious findings.\n\nHowever, it's important to remember that this is a single image and a complete evaluation requires a full examination by a trained radiologist. They would consider the patient's history, clinical findings, and potentially other imaging studies to make a definitive diagnosis.\n",
+  "saved_files": [
+    "input_layer0_qproj_10042_495770405.npy",
+    "output_layer0_qproj_10042_495770405.npy",
+    "input_layer0_kproj_10042_495770405.npy",
+    "output_layer0_kproj_10042_495770405.npy",
+    "input_layer0_vproj_10042_495770405.npy",
+    "output_layer0_vproj_10042_495770405.npy",
+    "input_layer0_oproj_10042_495770405.npy",
+    "output_layer0_oproj_10042_495770405.npy"
+  ]
+}

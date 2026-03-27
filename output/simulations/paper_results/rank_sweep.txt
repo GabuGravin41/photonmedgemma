@@ -1,0 +1,87 @@
+====================================================================================================
+PhotoMedGemma — Full Rank Sweep: Photonic Chip vs MedGemma 4B-IT Layer 0
+====================================================================================================
+
+All four layer-0 attention projections (q, k, v, o) compared at every
+manufacturable rank using real MedGemma activations from 5 breast cancer PNGs.
+
+Columns:
+  rank          — number of optical modes (SVD truncation rank)
+  energy        — fraction of weight Frobenius norm energy retained
+  svd_error     — ||W_r@x - W@x|| / ||W@x||  (full input, real MedGemma hidden states)
+  chip_fidelity — ||MZI_sim - compiled_matrix@x|| / ||compiled_matrix@x||
+                  (floating-point arithmetic precision of Clements compilation)
+  MZIs/mesh     — MZIs for one unitary (Vh or U); layer needs 2× + sigma
+  area/mesh     — estimated die area per unitary mesh
+                  Standard Si: 150μm stage × 8μm pitch
+                  Compact Si:   80μm stage × 5μm pitch
+
+── q_proj  shape=(2048,2560)  full_rank=2048
+   Compilation fidelity: error_U=7.02e-15  error_Vh=7.85e-15
+   Activation samples: 5 token(s)
+
+     rank   energy  svd_error  chip_fidelity     MZIs/mesh  area/mesh (std)  area/mesh (cmp)
+   ------------------------------------------------------------------------------------
+       64   28.8%     0.1859       1.08e-15         2,016           4.9 mm²           1.6 mm²
+      128   38.2%     0.1660       1.66e-15         8,128          19.7 mm²           6.6 mm²
+      256   52.8%     0.1422       2.93e-15        32,640          78.6 mm²          26.2 mm²
+      512   72.6%     0.1079       5.90e-15       130,816         314.6 mm²         104.9 mm²
+     1024   92.3%     0.0613       3.30e-15       523,776        1258.3 mm²         419.4 mm²
+     2048  100.0%     0.0000       1.00e-14     2,096,128        5033.2 mm²        1677.7 mm²
+
+── k_proj  shape=(1024,2560)  full_rank=1024
+   Compilation fidelity: error_U=5.19e-15  error_Vh=7.90e-15
+   Activation samples: 5 token(s)
+
+     rank   energy  svd_error  chip_fidelity     MZIs/mesh  area/mesh (std)  area/mesh (cmp)
+   ------------------------------------------------------------------------------------
+       64   27.3%     0.2492       1.22e-15         2,016           4.9 mm²           1.6 mm²
+      128   41.2%     0.2227       1.41e-15         8,128          19.7 mm²           6.6 mm²
+      256   61.6%     0.1783       8.16e-15        32,640          78.6 mm²          26.2 mm²
+      512   85.7%     0.1146       3.14e-14       130,816         314.6 mm²         104.9 mm²
+     1024  100.0%     0.0000       3.77e-15       523,776        1258.3 mm²         419.4 mm²
+
+── v_proj  shape=(1024,2560)  full_rank=1024
+   Compilation fidelity: error_U=5.24e-15  error_Vh=7.99e-15
+   Activation samples: 5 token(s)
+
+     rank   energy  svd_error  chip_fidelity     MZIs/mesh  area/mesh (std)  area/mesh (cmp)
+   ------------------------------------------------------------------------------------
+       64   28.6%     0.6690       8.09e-16         2,016           4.9 mm²           1.6 mm²
+      128   45.9%     0.5549       1.72e-15         8,128          19.7 mm²           6.6 mm²
+      256   67.9%     0.4051       2.12e-15        32,640          78.6 mm²          26.2 mm²
+      512   89.1%     0.2292       1.43e-14       130,816         314.6 mm²         104.9 mm²
+     1024  100.0%     0.0000       5.51e-15       523,776        1258.3 mm²         419.4 mm²
+
+── o_proj  shape=(2560,2048)  full_rank=2048
+   Compilation fidelity: error_U=7.75e-15  error_Vh=6.92e-15
+   Activation samples: 5 token(s)
+
+     rank   energy  svd_error  chip_fidelity     MZIs/mesh  area/mesh (std)  area/mesh (cmp)
+   ------------------------------------------------------------------------------------
+       64   23.5%     0.3106       1.07e-15         2,016           4.9 mm²           1.6 mm²
+      128   35.0%     0.2822       2.58e-15         8,128          19.7 mm²           6.6 mm²
+      256   52.6%     0.2414       2.12e-15        32,640          78.6 mm²          26.2 mm²
+      512   74.8%     0.1690       4.82e-15       130,816         314.6 mm²         104.9 mm²
+     1024   94.0%     0.0840       9.29e-15       523,776        1258.3 mm²         419.4 mm²
+     2048  100.0%     0.0000       3.55e-15     2,096,128        5033.2 mm²        1677.7 mm²
+
+====================================================================================================
+Hardware constraints summary (one unitary mesh, per projection):
+
+    Rank     MZIs/mesh    Area/mesh (std Si)     Area/mesh (compact)
+  --------------------------------------------------------------------
+      64         2,016                4.9 mm²                  1.6 mm²
+     128         8,128               19.7 mm²                  6.6 mm²
+     256        32,640               78.6 mm²                 26.2 mm²
+     512       130,816              314.6 mm²                104.9 mm²
+    1024       523,776             1258.3 mm²                419.4 mm²
+    2048     2,096,128             5033.2 mm²               1677.7 mm²
+
+Notes:
+  - Area estimates are lower bounds (mesh only; excludes I/O, drivers, routing).
+  - Each projection requires 2 unitary meshes (Vh + U) plus a sigma (VOA) stage.
+  - Layer 0 has 4 projections (q, k, v, o); full layer = 8 meshes + 4 sigma stages.
+  - svd_error is measured vs W@x (full input), not vs MedGemma output y_mg.
+  - chip_fidelity measures Clements compilation accuracy, not model approximation.
+====================================================================================================

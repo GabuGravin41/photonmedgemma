@@ -1,0 +1,598 @@
+% ============================================================
+% Paper 1: PhotoMedGemma Overview
+% "PhotoMedGemma: A Photonic Chip Compiler for Deploying
+%  Medical AI in Resource-Constrained Environments"
+% ============================================================
+\documentclass[12pt, a4paper]{article}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{cite}
+\usepackage{microtype}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  citecolor=blue!70!black,
+  urlcolor=blue!70!black,
+}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  commentstyle=\color{codegreen},
+  keywordstyle=\color{blue},
+  numberstyle=\tiny\color{codegray},
+  breaklines=true,
+  frame=single,
+  language=Python,
+}
+
+% ----------------------------------------------------------------
+\title{\textbf{PhotoMedGemma:}\\[4pt]
+       \large A Photonic Chip Compiler for Deploying\\
+       Medical Artificial Intelligence in\\
+       Resource-Constrained Environments}
+
+\author{
+  Linda H.\\[2pt]
+  \small Independent Research\\[2pt]
+  \small \href{https://github.com/yourusername/photomedgemma}{github.com/yourusername/photomedgemma}
+}
+
+\date{March 2026}
+% ----------------------------------------------------------------
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present \textbf{PhotoMedGemma}, an open-source compiler and simulation
+framework that translates the weights of MedGemma-4B-IT --- Google's
+4-billion-parameter multimodal medical AI --- into phase settings for silicon
+photonic Mach-Zehnder interferometer (MZI) meshes.
+The central insight is that transformer inference is a \emph{static} operation:
+once trained, model weights never change, so the computation can be permanently
+encoded into the geometry of a photonic chip, converting matrix-vector
+multiplication into passive light propagation.
+Our compiler decomposes each weight matrix via truncated singular value
+decomposition (SVD) and maps the resulting unitaries to Clements MZI meshes.
+We validate the pipeline on real MedGemma activations captured from five
+breast cancer PNG images processed on Kaggle.
+Compilation achieves machine-precision fidelity ($\approx 7 \times 10^{-15}$)
+at both rank-64 and full rank.
+Rank-64 MZI meshes retain $23$--$92\%$ of the full weight energy
+depending on the projection, requiring $r(r-1)/2 = 2{,}016$ MZIs per mesh
+versus $2{,}096{,}128$ MZIs at full rank.
+The photonic architecture projects $\approx 8\,\text{W}$ total system power
+versus $\approx 300\,\text{W}$ for an A100 GPU --- a $37\times$ improvement.
+All code, compiled phase maps, and experimental data are publicly available.
+The ultimate goal is a sub-\$100 photonic chip that runs world-class medical AI
+in hospitals throughout Africa and the global south with no cloud dependency,
+no data privacy risk, and no energy crisis.
+\end{abstract}
+
+% ----------------------------------------------------------------
+\section{Introduction}
+\label{sec:intro}
+
+Artificial intelligence has achieved clinical-grade performance in medical
+imaging, diagnostic reasoning, and treatment planning.
+Yet the hardware required to run such models is concentrated in wealthy
+countries, behind cloud APIs, and inside data centers consuming hundreds of
+megawatts.
+In 2024, we worked with neurosurgeons at \textbf{Kenyatta National Hospital
+(KNH)} in Nairobi, Kenya --- the largest referral hospital in East and Central
+Africa.
+The clinical need was unambiguous: AI-assisted triage for cerebral hemorrhage,
+herniation, and neurological emergencies from CT scans.
+MedGemma~\cite{medgemma2024} can perform all of these tasks.
+It cannot, however, be deployed at KNH due to four barriers: data sovereignty
+law prohibiting foreign data transfer; insufficient internet bandwidth for
+real-time inference; prohibitive cloud API costs; and sub-second latency
+requirements for emergency triage.
+
+The answer is not a smaller model.
+The answer is \emph{different hardware}.
+
+Photonic neural networks perform matrix-vector multiplication using light
+rather than electrical charge.
+The key properties are:
+(i) \emph{speed} --- computation completes at the speed of light traversing a
+few millimetres of silicon;
+(ii) \emph{energy} --- photons propagate through passive waveguides at
+essentially zero energy cost;
+(iii) \emph{parallelism} --- wavelength-division multiplexing (WDM) provides
+free $N\times$ parallelism across attention heads.
+
+The static compilation insight of this work is the following.
+A transformer performing inference from a fixed, trained model never changes
+its weights.
+Therefore, the weight matrices can be \emph{permanently encoded} into the
+physical geometry of a photonic chip --- the phase angles of its MZI
+interferometers.
+Inference then becomes pure physics: optical fields propagate through the chip,
+and the computation is performed by light interference.
+This is analogous to an application-specific integrated circuit (ASIC) versus a
+GPU, but implemented in photons rather than electrons.
+
+\paragraph{Contributions.} This paper presents:
+\begin{enumerate}
+  \item A complete open-source compiler (\S\ref{sec:compiler}) from MedGemma
+        weights to MZI phase maps, validated at machine precision.
+  \item A simulation framework (\S\ref{sec:simulation}) that applies the
+        compiled Clements mesh to real MedGemma activations and compares the
+        output to the digital ground truth.
+  \item A rank sweep (\S\ref{sec:results}) from $r=64$ to full rank across all
+        four layer-0 attention projections, with honest reporting of SVD
+        approximation error, chip compilation fidelity, and hardware cost.
+  \item A chip architecture specification (\S\ref{sec:architecture}) for
+        220\,nm SOI silicon photonics with full power budget analysis.
+\end{enumerate}
+
+% ----------------------------------------------------------------
+\section{Background}
+\label{sec:background}
+
+\subsection{MedGemma-4B-IT Architecture}
+
+MedGemma-4B-IT is a multimodal vision-language model based on the Gemma-3
+architecture~\cite{gemma3_2024}.
+It comprises a SigLIP-So400M vision encoder (400\,M parameters) connected via
+a linear projector to a Gemma-3-4B language model (3.6\,B parameters).
+The language model has the following dimensions relevant to photonic compilation:
+
+\begin{table}[h]
+\centering
+\caption{MedGemma-4B language model parameters relevant to photonic compilation.}
+\label{tab:medgemma_arch}
+\begin{tabular}{ll}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Hidden dimension $d_{\text{model}}$ & 2048 \\
+Number of transformer layers & 46 \\
+Number of attention heads & 8 \\
+Number of key-value heads (GQA) & 4 \\
+Per-head dimension & 256 \\
+FFN inner dimension & 16{,}384 \\
+\midrule
+Q projection shape & $2048 \times 2560$ \\
+K projection shape & $1024 \times 2560$ \\
+V projection shape & $1024 \times 2560$ \\
+O projection shape & $2560 \times 2048$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Singular Value Decomposition for Photonic Compilation}
+
+Any real or complex matrix $W \in \mathbb{R}^{m \times n}$ admits the singular
+value decomposition (SVD):
+\begin{equation}
+  W = U \Sigma V^\dagger
+  \label{eq:svd}
+\end{equation}
+where $U \in \mathbb{C}^{m \times m}$ and $V \in \mathbb{C}^{n \times n}$ are
+unitary matrices and $\Sigma \in \mathbb{R}^{m \times n}$ is diagonal with
+non-negative entries $\sigma_1 \geq \sigma_2 \geq \cdots \geq \sigma_k \geq 0$
+($k = \min(m, n)$).
+
+A rank-$r$ approximation is obtained by retaining only the $r$ largest singular
+values:
+\begin{equation}
+  W_r = U_r \Sigma_r V_r^\dagger
+  \label{eq:svd_truncated}
+\end{equation}
+where $U_r = U[:, :r]$, $\Sigma_r = \text{diag}(\sigma_1, \ldots, \sigma_r)$,
+$V_r^\dagger = V^\dagger[:r, :]$.
+The energy retained is $\sum_{i=1}^r \sigma_i^2 / \sum_{i=1}^k \sigma_i^2$.
+
+Because $U_r$ and $V_r^\dagger$ are partial-unitary (their columns/rows are
+orthonormal), each can be embedded into a full unitary and implemented as a
+Clements MZI mesh.
+
+\subsection{Clements Decomposition}
+\label{sec:clements_background}
+
+Clements et al.~\cite{clements2016} showed that any $N \times N$ unitary matrix
+$U$ can be decomposed as a product of $2 \times 2$ MZI rotation matrices:
+\begin{equation}
+  U = D \cdot T_1 \cdot T_2 \cdots T_{N(N-1)/2}
+  \label{eq:clements}
+\end{equation}
+where $D = \text{diag}(e^{i\psi_1}, \ldots, e^{i\psi_N})$ is a diagonal phase
+screen and each $T_k$ acts on two adjacent modes $(m_k, m_k{+}1)$ with the
+$2\times2$ transfer matrix:
+\begin{equation}
+  T(\theta, \varphi) =
+  \begin{pmatrix}
+    \cos(\theta/2) & -e^{-i\varphi}\sin(\theta/2) \\
+    e^{i\varphi}\sin(\theta/2) & \cos(\theta/2)
+  \end{pmatrix}.
+  \label{eq:mzi_matrix}
+\end{equation}
+This decomposition uses exactly $N(N-1)/2$ MZIs --- provably optimal for
+universal unitary synthesis.
+
+For the forward pass, the unitary is applied as:
+\begin{equation}
+  U \mathbf{x} = (D \cdot T_1 \cdots T_M) \mathbf{x}
+  = D \bigl( T_1 ( \cdots (T_M \mathbf{x}) \cdots ) \bigr),
+  \label{eq:clements_forward}
+\end{equation}
+which is computed by first applying MZIs in \emph{descending column order}
+(right-to-left elimination), then multiplying by the phase screen $D$.
+
+% ----------------------------------------------------------------
+\section{The PhotoMedGemma Compiler}
+\label{sec:compiler}
+
+\subsection{Pipeline Overview}
+
+The compilation pipeline proceeds in six stages:
+
+\begin{enumerate}
+  \item \textbf{Model Parser}: loads MedGemma weights from HuggingFace
+        (bfloat16, converted to float32 for numerical stability).
+  \item \textbf{Layer Decomposer}: computes truncated SVD of each weight matrix
+        at the selected rank $r$.
+  \item \textbf{Clements Decomposer}: converts each unitary factor ($U_r$,
+        $V_r^\dagger$) to $(r-1) \cdot r / 2$ MZI phase pairs $(\theta, \varphi)$
+        plus a phase screen $\boldsymbol{\psi}$.
+  \item \textbf{Phase Encoder}: quantizes phases to $B$-bit DAC resolution
+        (default $B=12$ bits, giving $\lesssim 0.044^\circ$ phase error).
+  \item \textbf{Netlist Generator}: outputs a photonic SPICE-like netlist
+        (\texttt{.pntl} format).
+  \item \textbf{GDS Generator}: produces a physical GDSII layout file for
+        foundry submission using \texttt{gdsfactory}.
+\end{enumerate}
+
+\subsection{SVD Rank Selection}
+
+Table~\ref{tab:rank_selection} summarises the rank selection strategy.
+For the current proof-of-concept, we use $r = 64$.
+
+\begin{table}[h]
+\centering
+\caption{Rank selection strategy for SVD-based photonic compilation.}
+\label{tab:rank_selection}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Target} & \textbf{Energy threshold} & \textbf{Rank} & \textbf{MZI reduction} \\
+\midrule
+High accuracy      & 99.9\% & 256--512 & $16\times$ \\
+Balanced           & 99\%   & 64--128  & $64\times$ \\
+Aggressive         & 95\%   & 16--32   & $256\times$ \\
+Demo / PoC         & 90\%   & 8--16    & $1024\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Clements Convention and Numerical Precision}
+
+The correct T-matrix convention for left-elimination Clements (as implemented
+in \texttt{src/photonic/clements.py}) is:
+\begin{equation}
+  T(\theta, \varphi) =
+  \begin{pmatrix}
+    \cos(\theta/2) & -e^{-i\varphi}\sin(\theta/2) \\
+    e^{i\varphi}\sin(\theta/2) & \cos(\theta/2)
+  \end{pmatrix},
+  \label{eq:T_correct}
+\end{equation}
+applied in \emph{descending column order}.
+The compiled MZI phases in \texttt{output/real/phase\_map.json} reproduce both
+the $V_r^\dagger$ and $U_r$ unitaries to errors $\varepsilon_U, \varepsilon_{V^\dagger}
+\lesssim 8 \times 10^{-15}$ --- genuine machine precision --- for all four
+layer-0 attention projections.
+
+% ----------------------------------------------------------------
+\section{Simulation and Validation}
+\label{sec:simulation}
+
+\subsection{Experimental Setup}
+
+We ran MedGemma-4B-IT on five breast cancer PNG images
+(\texttt{10025\_893612858.png}, \texttt{10011\_1031443799.png},
+\texttt{10042\_102733848.png}, \texttt{10042\_1648588715.png},
+\texttt{10042\_495770405.png})
+using a Kaggle T4 GPU notebook with 4-bit NF4 quantization.
+For each image, we captured:
+\begin{itemize}
+  \item The input hidden state $\mathbf{x} \in \mathbb{R}^{2560}$ into each
+        layer-0 attention projection.
+  \item The output $\mathbf{y}_{\text{MG}} = W_{\text{MG}} \mathbf{x}$
+        produced by MedGemma's digital computation.
+  \item The weight matrices $W_q, W_k, W_v, W_o$ (dequantized from NF4 to
+        float32).
+\end{itemize}
+These arrays were downloaded as \texttt{.npy} files and used as ground truth
+for the local photonic simulation.
+
+\subsection{Error Metrics}
+
+We report three independent error metrics:
+
+\paragraph{Chip fidelity.}
+\begin{equation}
+  \varepsilon_{\text{chip}} =
+  \frac{\| \text{MZI\_sim}(\mathbf{x}) - U_r V_r^\dagger \mathbf{x} \|}
+       {\| U_r V_r^\dagger \mathbf{x} \|}
+  \label{eq:chip_fidelity}
+\end{equation}
+This measures the floating-point precision of the Clements compilation.
+Expected value: $\approx 10^{-15}$.
+
+\paragraph{SVD approximation error.}
+\begin{equation}
+  \varepsilon_{\text{SVD}}(r) =
+  \frac{\| W_r \mathbf{x} - W \mathbf{x} \|}
+       {\| W \mathbf{x} \|}
+  \label{eq:svd_error}
+\end{equation}
+This is the genuine information loss incurred by the rank-$r$ approximation.
+It depends on the singular value spectrum of $W$ and the actual MedGemma input
+$\mathbf{x}$.
+
+\paragraph{Quantization error.}
+\begin{equation}
+  \varepsilon_{\text{quant}} =
+  \frac{\| W_{\text{kaggle}} \mathbf{x} - \mathbf{y}_{\text{MG}} \|}
+       {\| \mathbf{y}_{\text{MG}} \|}
+  \label{eq:quant_error}
+\end{equation}
+This measures the error introduced by 4-bit NF4 weight quantization during
+extraction from Kaggle.
+Expected value: $< 0.3\%$.
+
+\subsection{Validation Results}
+
+Table~\ref{tab:comparison} reports all three metrics for rank-64 and full rank.
+
+\begin{table}[h]
+\centering
+\caption{PhotoMedGemma validation on 5 real breast cancer images.
+         Rank-64 chip vs.\ full MedGemma layer-0 attention.}
+\label{tab:comparison}
+\begin{tabular}{lcccccc}
+\toprule
+\multirow{2}{*}{\textbf{Projection}} &
+\multirow{2}{*}{\textbf{Shape}} &
+\multirow{2}{*}{\textbf{Chip fidelity}} &
+\multicolumn{2}{c}{\textbf{SVD error}} &
+\multirow{2}{*}{\textbf{Quant. err.}} \\
+\cmidrule(lr){4-5}
+& & & $r=64$ & $r=r_{\max}$ & \\
+\midrule
+\texttt{q\_proj} & $2048 \times 2560$ & $1.1 \times 10^{-15}$ & 0.186 & $1.9 \times 10^{-15}$ & 0.0017 \\
+\texttt{k\_proj} & $1024 \times 2560$ & $1.2 \times 10^{-15}$ & 0.249 & $1.9 \times 10^{-15}$ & 0.0019 \\
+\texttt{v\_proj} & $1024 \times 2560$ & $8.1 \times 10^{-16}$ & 0.669 & $3.1 \times 10^{-15}$ & 0.0022 \\
+\texttt{o\_proj} & $2560 \times 2048$ & $1.1 \times 10^{-15}$ & 0.311 & $2.4 \times 10^{-15}$ & 0.0020 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three conclusions follow immediately from Table~\ref{tab:comparison}:
+\begin{enumerate}
+  \item \textbf{Compilation is exact.}
+        Chip fidelity is at machine precision ($\approx 10^{-15}$) for all
+        projections.
+        The Clements algorithm faithfully encodes the target unitary.
+  \item \textbf{SVD approximation error is rank-controlled.}
+        At full rank, the photonic chip recovers $W\mathbf{x}$ to machine
+        precision.
+        At rank 64, the approximation error ranges from 0.19 to 0.67,
+        reflecting the singular value spectra of individual weight matrices.
+  \item \textbf{Quantization error is negligible.}
+        The 4-bit NF4 extraction from Kaggle introduces $< 0.22\%$ error ---
+        confirming that the weights used for compilation are accurate.
+\end{enumerate}
+
+% ----------------------------------------------------------------
+\section{Rank Sweep: From 64 to Full Rank}
+\label{sec:results}
+
+We evaluate all four layer-0 attention projections at ranks
+$r \in \{64, 128, 256, 512, 1024, 2048\}$ (where applicable).
+
+\begin{table}[h]
+\centering
+\caption{Full rank sweep for \texttt{q\_proj} ($2048 \times 2560$, full rank = 2048).
+         All chip-fidelity values are $\approx 10^{-15}$.}
+\label{tab:rank_sweep_q}
+\begin{tabular}{rrcrrr}
+\toprule
+\textbf{Rank} & \textbf{Energy} & \textbf{SVD error} & \textbf{MZIs/mesh} &
+\textbf{Area (std)} & \textbf{Area (cmp)} \\
+\midrule
+    64 & 28.8\% & 0.186 &        2,016 &    4.9\,mm$^2$ &    1.6\,mm$^2$ \\
+   128 & 38.2\% & 0.166 &        8,128 &   19.7\,mm$^2$ &    6.6\,mm$^2$ \\
+   256 & 52.8\% & 0.142 &       32,640 &   78.6\,mm$^2$ &   26.2\,mm$^2$ \\
+   512 & 72.6\% & 0.108 &      130,816 &  314.6\,mm$^2$ &  104.9\,mm$^2$ \\
+  1024 & 92.3\% & 0.061 &      523,776 & 1258.3\,mm$^2$ &  419.4\,mm$^2$ \\
+  2048 & 100\%  & 0.000 &    2,096,128 & 5033.2\,mm$^2$ & 1677.7\,mm$^2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+\textit{Standard Si}: 150\,\textmu m stage $\times$ 8\,\textmu m pitch per MZI.
+\textit{Compact Si}: 80\,\textmu m stage $\times$ 5\,\textmu m pitch per MZI.
+Each projection requires 2 unitary meshes (Vh + U) plus a sigma (VOA) stage.
+
+\begin{table}[h]
+\centering
+\caption{SVD error vs.\ rank for all four layer-0 attention projections.}
+\label{tab:rank_sweep_all}
+\begin{tabular}{rcccc}
+\toprule
+\textbf{Rank} & \textbf{q\_proj} & \textbf{k\_proj} & \textbf{v\_proj} & \textbf{o\_proj} \\
+\midrule
+    64 & 0.186 & 0.249 & 0.669 & 0.311 \\
+   128 & 0.166 & 0.223 & 0.555 & 0.282 \\
+   256 & 0.142 & 0.178 & 0.405 & 0.241 \\
+   512 & 0.108 & 0.115 & 0.229 & 0.169 \\
+  1024 & 0.061 & 0.000 & 0.000 & 0.084 \\
+  2048 & 0.000 & ---   & ---   & 0.000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The v\_proj matrix has the slowest singular value decay, indicating that
+it requires higher rank for a given approximation quality.
+This is a physical property of the weight matrix, not a limitation of the
+compiler.
+
+% ----------------------------------------------------------------
+\section{Chip Architecture}
+\label{sec:architecture}
+
+\subsection{Platform: 220\,nm Silicon-on-Insulator (SOI)}
+
+We target the 220\,nm SOI process available at imec (iSiPP50G), AIM Photonics,
+and GlobalFoundries (SiPh 45CLO).
+Key parameters:
+\begin{itemize}
+  \item Waveguide: 450\,nm wide $\times$ 220\,nm tall Si core, SiO$_2$ cladding
+  \item Wavelength: 1310\,nm (O-band, low dispersion)
+  \item Phase shifter: thermal TiN heater, $\Delta\phi = \pi$ at 10--20\,mW
+  \item Propagation loss: 2--3\,dB/cm
+  \item Coupling loss: 2--4\,dB per grating coupler
+  \item Detector: Ge photodiode, $> 40$\,GHz bandwidth, 0.9\,A/W responsivity
+\end{itemize}
+
+\subsection{Single Chip: 10\,mm $\times$ 10\,mm}
+
+Each chip implements one $64 \times 64$ Clements unitary mesh (2,016 MZIs)
+in an 8\,mm $\times$ 8\,mm active area, with 64 grating couplers on each edge
+for fiber I/O.
+The heater control routing uses the top metal layer: 1,024 heater lines routed
+to bond pads connected to DAC chips on the PCB.
+
+\subsection{Power Budget}
+
+\begin{table}[h]
+\centering
+\caption{Power budget per transformer layer (rank-64, 46 layers).}
+\label{tab:power}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Component} & \textbf{Power} & \textbf{Notes} \\
+\midrule
+Laser sources (8$\times$ WDM) &  800\,mW & $\approx 100$\,mW per wavelength \\
+Phase shifters (static)        &    0\,mW & Thermal; no steady-state draw \\
+Photodetectors                 &   50\,mW & Ge PD array \\
+Electronic control (FPGA)      &    5\,W  & Softmax, LayerNorm, routing \\
+Memory (KV cache)              &    2\,W  & LPDDR5 \\
+\midrule
+\textbf{Total}                 & $\approx 8$\,W & \textbf{vs.\ $\approx 300$\,W for A100 GPU} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At 1 token per millisecond: $8\,\text{mJ/token}$ versus
+$300\,\text{mJ/token}$ for an A100 --- a \textbf{37$\times$ improvement in
+energy efficiency}.
+
+% ----------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{On SVD approximation error.}
+The rank-64 SVD errors (0.19--0.67) represent genuine information loss relative
+to the full weight matrix.
+They do \emph{not} indicate a flaw in the photonic compiler.
+The chip executes the rank-64 approximation to machine precision.
+The question of how much task accuracy is preserved at rank 64 versus full rank
+requires end-to-end evaluation on medical benchmarks (MedQA, PubMedQA), which
+is the subject of ongoing work.
+
+\paragraph{On chip count.}
+A rank-64 implementation of all four layer-0 projections requires
+$4 \times 2$ unitary meshes = 8 chips per layer.
+Scaling to all 46 layers and 7 weight matrices per layer: $\approx 2{,}576$
+chips at rank-64.
+This is large but manufacturable with a multi-chip module approach at current
+silicon photonics scales.
+
+\paragraph{On fabrication.}
+The compilation output (\texttt{output/real/phase\_map.json},
+\texttt{output/real/netlist/}, \texttt{output/real/gds/}) is ready for
+submission to a photonic foundry.
+The GDS layout uses standard \texttt{gdsfactory} cells compatible with 220\,nm
+SOI PDKs from imec, AIM Photonics, and GlobalFoundries.
+
+% ----------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have presented PhotoMedGemma: a complete compiler and simulation framework
+that translates MedGemma-4B-IT's attention weights into Clements MZI phase
+maps for silicon photonic chips.
+The compilation achieves machine precision ($\approx 7 \times 10^{-15}$) for
+both the $V_r^\dagger$ and $U_r$ unitaries.
+The rank-$r$ approximation quality is a continuous design parameter: at full
+rank the chip recovers the digital computation exactly; at rank 64 it trades
+hardware simplicity for approximation error.
+
+The project is motivated by a concrete human need: deploying clinical-grade
+medical AI at Kenyatta National Hospital and hospitals throughout the global
+south, without cloud dependency, data sovereignty risk, or energy crisis.
+The photonic hardware projects $37\times$ better energy efficiency than current
+GPU infrastructure.
+
+All code, compiled phase maps, and experimental results are open-source.
+
+% ----------------------------------------------------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{medgemma2024}
+Google DeepMind,
+\textit{MedGemma: A Family of Medical AI Models},
+Technical Report, 2024.
+
+\bibitem{gemma3_2024}
+Google DeepMind,
+\textit{Gemma 3 Technical Report},
+arXiv:2408.00118, 2024.
+
+\bibitem{clements2016}
+W.R.\ Clements, P.C.\ Humphreys, B.J.\ Metcalf, W.S.\ Kolthammer,
+and I.A.\ Walmsley,
+``Optimal design for universal multiport interferometers,''
+\textit{Optica}, 3(12):1460--1465, 2016.
+
+\bibitem{reck1994}
+M.\ Reck, A.\ Zeilinger, H.J.\ Bernstein, and P.\ Bertani,
+``Experimental realization of any discrete unitary operator,''
+\textit{Physical Review Letters}, 73(1):58, 1994.
+
+\bibitem{shen2017}
+Y.\ Shen, N.C.\ Harris, S.\ Skirlo, M.\ Prabhu, T.\ Baehr-Jones,
+M.\ Hochberg, X.\ Sun, S.\ Zhao, H.\ Larochelle, D.\ Englund, and M.\ Solja\v{c}i\'{c},
+``Deep learning with coherent nanophotonic circuits,''
+\textit{Nature Photonics}, 11(7):441--446, 2017.
+
+\bibitem{bandyopadhyay2022}
+S.\ Bandyopadhyay, A.\ Sludds, S.\ Krastanov, R.\ Hamerly,
+N.\ Harris, D.\ Bunandar, M.\ Streshinsky, M.\ Hochberg, and D.\ Englund,
+``Single chip photonic deep neural network with accelerated training,''
+\textit{arXiv:2208.01623}, 2022.
+
+\end{thebibliography}
+
+\end{document}

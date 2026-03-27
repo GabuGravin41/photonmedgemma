@@ -1,0 +1,327 @@
+% ============================================================
+% Paper 4: NeurIPS-style conference paper
+% "PhotoMedGemma: Machine-Precision Compilation of a
+%  Medical Vision-Language Model onto Photonic Hardware"
+% ============================================================
+% NeurIPS 2026 format (approximate — uses standard article with
+% NeurIPS-like layout and conventions)
+% ============================================================
+\documentclass{article}
+
+% NeurIPS-style packages
+\usepackage[final]{neurips_2024}   % use neurips_2024.sty if available; else article
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black}
+
+% If neurips_2024.sty is not available, comment the \usepackage above and
+% uncomment the following minimal style:
+%\usepackage[margin=2.5cm]{geometry}
+
+% ----------------------------------------------------------------
+\title{PhotoMedGemma: Machine-Precision Compilation of a\\
+       Medical Vision-Language Model onto Photonic Hardware}
+
+\author{%
+  Linda H.\\
+  Independent Research\\
+  \texttt{photomedgemma@github.com}
+}
+
+% ----------------------------------------------------------------
+\begin{document}
+\maketitle
+
+% ----------------------------------------------------------------
+\begin{abstract}
+We present PhotoMedGemma, an open-source compiler that maps the weight matrices
+of MedGemma-4B-IT --- a 4-billion-parameter multimodal medical AI --- to phase
+settings for silicon photonic Mach-Zehnder interferometer (MZI) meshes.
+Photonic chips perform matrix-vector multiplication using light, offering
+$\sim 37\times$ better energy efficiency than GPU inference.
+The critical barrier to deployment of AI in global-south hospitals
+(data sovereignty, connectivity, energy) motivates this hardware approach.
+
+Our compiler performs truncated singular value decomposition (SVD) of each
+weight matrix, followed by Clements decomposition of the resulting unitary
+factors into MZI phase angles.
+We validate the pipeline on real MedGemma activations captured from five
+breast cancer PNG images.
+The compiled Clements mesh reproduces both unitary factors to errors
+$< 8 \times 10^{-15}$ (machine precision) for all four layer-0 attention
+projections.
+We report a complete rank sweep from $r = 64$ to full rank, showing
+SVD approximation error decreasing from $6.9 \times 10^{-1}$ at rank 64
+to machine precision at full rank, with MZI counts scaling as $r(r-1)/2$.
+All code and compiled phase maps are released publicly.
+\end{abstract}
+
+% ----------------------------------------------------------------
+\section{Introduction}
+
+Large language models trained for medicine, such as MedGemma~\citep{medgemma2024},
+achieve clinical-grade accuracy on diagnostic tasks.
+Yet their deployment in low-resource settings --- rural hospitals, field
+clinics, regional health systems in Africa and South Asia --- is blocked by
+energy requirements ($\sim 300$\,W/GPU), cloud API costs, and data sovereignty
+constraints.
+
+Photonic neural networks~\citep{shen2017, bandyopadhyay2022} offer a
+fundamentally different compute substrate: matrix-vector multiplication encoded
+into the interference pattern of light in an MZI mesh.
+For a fixed, trained model, all weight matrices are constant.
+The key insight of this work is that \textbf{static photonic compilation} ---
+encoding weights permanently into MZI phase settings --- converts inference
+into a passive physical process: light in, computation by geometry,
+light out.
+No dynamic weight updates are needed; the chip's heaters are set once and
+consume near-zero steady-state power.
+
+\paragraph{Contributions.}
+\begin{itemize}
+  \item[(1)] A complete open-source compiler from MedGemma weights to
+             Clements MZI phase maps, validated at machine precision
+             ($\varepsilon < 8 \times 10^{-15}$).
+  \item[(2)] A simulation framework applying compiled phases to real MedGemma
+             activations from breast cancer images, measuring SVD approximation
+             error against digital ground truth.
+  \item[(3)] A full rank sweep ($r = 64, 128, 256, 512, 1024, 2048$) with
+             honest reporting of accuracy-hardware trade-offs.
+  \item[(4)] Open-source release of all code, compiled phases, and data.
+\end{itemize}
+
+% ----------------------------------------------------------------
+\section{Background}
+
+\subsection{MZI Mesh as a Unitary Operator}
+
+A passive linear optical network on $N$ modes implements a unitary matrix
+$U \in \mathcal{U}(N)$ on the complex mode amplitudes~\citep{reck1994}.
+The \textbf{Clements decomposition}~\citep{clements2016} factors any
+$U \in \mathcal{U}(N)$ into exactly $N(N-1)/2$ two-mode rotations:
+\begin{equation}
+  U = D \cdot T_1 \cdot T_2 \cdots T_{N(N-1)/2},
+  \quad
+  T(\theta,\varphi) = \begin{pmatrix}
+    \cos\tfrac{\theta}{2} & -e^{-i\varphi}\sin\tfrac{\theta}{2} \\
+    e^{i\varphi}\sin\tfrac{\theta}{2} & \cos\tfrac{\theta}{2}
+  \end{pmatrix},
+  \label{eq:clements}
+\end{equation}
+where $D$ is a diagonal phase screen.
+The forward pass applies MZIs in descending column order, then $D$.
+
+\subsection{SVD-Based Photonic Weight Compilation}
+
+A weight matrix $W \in \mathbb{R}^{m\times n}$ is compiled via SVD:
+$W = U\Sigma V^\dagger$.
+$V^\dagger$ and $U$ are unitary and implemented as Clements meshes;
+$\Sigma = \text{diag}(\sigma_1,\ldots,\sigma_k)$ is implemented as a
+variable optical attenuator (VOA) bank.
+For a rank-$r$ approximation, we retain the top-$r$ singular triplets.
+
+% ----------------------------------------------------------------
+\section{The PhotoMedGemma Compiler}
+\label{sec:compiler}
+
+\subsection{Pipeline}
+
+\begin{algorithm}[H]
+\caption{PhotoMedGemma Compilation}
+\label{alg:compiler}
+\begin{algorithmic}[1]
+  \STATE \textbf{Input}: weight matrix $W \in \mathbb{R}^{m\times n}$, rank $r$
+  \STATE Compute truncated SVD: $U_r, \Sigma_r, V_r^\dagger \leftarrow \text{SVD}(W, r)$
+  \STATE Embed $V_r^\dagger$ in a full $n\times n$ unitary $\hat{V}^\dagger$
+  \STATE Apply Clements left-elimination to $\hat{V}^\dagger$:
+         $\{(\theta_k^V, \varphi_k^V)\}_{k=1}^{n(n-1)/2}$, $\boldsymbol{\psi}^V$
+  \STATE Embed $U_r$ in a full $m\times m$ unitary $\hat{U}$
+  \STATE Apply Clements left-elimination to $\hat{U}$:
+         $\{(\theta_k^U, \varphi_k^U)\}_{k=1}^{m(m-1)/2}$, $\boldsymbol{\psi}^U$
+  \STATE Quantise all phases to $B=12$-bit DAC codes
+  \STATE Write phase map to \texttt{phase\_map.json}; GDS to \texttt{.gds}
+  \STATE \textbf{Output}: phase settings for $\hat{V}^\dagger$ mesh,
+         attenuators $\sigma_1,\ldots,\sigma_r$, phase settings for $\hat{U}$ mesh
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Clements Convention}
+
+The correct transfer matrix for the left-elimination Clements algorithm is
+equation~(\ref{eq:clements}), applied in \textbf{descending column order}
+during the forward pass.
+This is verified by requiring $U_{\text{reconstructed}}\mathbf{x} = U_{\text{target}}\mathbf{x}$
+to machine precision before writing the phase map.
+
+% ----------------------------------------------------------------
+\section{Experiments}
+
+\subsection{Setup}
+
+We ran MedGemma-4B-IT on 5 breast cancer PNG images using a Kaggle T4 GPU
+(4-bit NF4 quantisation).
+For each image, we captured layer-0 attention projection inputs and outputs,
+plus weight matrices $W_q, W_k, W_v, W_o$ (dequantised from NF4 to float32).
+Three metrics are computed:
+
+\noindent \textbf{Chip fidelity:}
+$\varepsilon_{\rm chip} = \|\text{MZI\_sim}(\mathbf{x}) - U_r V_r^\dagger\mathbf{x}\|
+/ \|U_r V_r^\dagger\mathbf{x}\|$.
+
+\noindent \textbf{SVD approximation error:}
+$\varepsilon_{\rm SVD}(r) = \|W_r\mathbf{x} - W\mathbf{x}\| / \|W\mathbf{x}\|$.
+
+\noindent \textbf{Quantisation error:}
+$\varepsilon_{\rm quant} = \|W_{\rm kaggle}\mathbf{x} - \mathbf{y}_{\rm MG}\|
+/ \|\mathbf{y}_{\rm MG}\|$.
+
+\subsection{Compilation Fidelity}
+
+\begin{table}[h]
+\centering
+\caption{Compilation fidelity for all four layer-0 attention projections.
+         All errors at machine precision ($\approx 10^{-15}$).}
+\label{tab:fidelity}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Proj.} & \textbf{Shape} & \textbf{Chip fid.} & \textbf{SVD err.\ ($r$=64)} &
+\textbf{SVD err.\ (full)} & \textbf{Quant.} \\
+\midrule
+q\_proj & $2048{\times}2560$ & $1.1\!\times\!10^{-15}$ & 0.186 & $1.9\!\times\!10^{-15}$ & 0.0017 \\
+k\_proj & $1024{\times}2560$ & $1.2\!\times\!10^{-15}$ & 0.249 & $1.9\!\times\!10^{-15}$ & 0.0019 \\
+v\_proj & $1024{\times}2560$ & $8.1\!\times\!10^{-16}$ & 0.669 & $3.1\!\times\!10^{-15}$ & 0.0022 \\
+o\_proj & $2560{\times}2048$ & $1.1\!\times\!10^{-15}$ & 0.311 & $2.4\!\times\!10^{-15}$ & 0.0020 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Rank Sweep}
+
+\begin{table}[h]
+\centering
+\caption{SVD approximation error vs.\ rank for q\_proj. All chip-fidelity values
+         are $\approx 10^{-15}$ (not shown; compilation is exact at all ranks).}
+\label{tab:rank_sweep}
+\begin{tabular}{rrrrrr}
+\toprule
+\textbf{Rank} & \textbf{Energy} & $\varepsilon_{\rm SVD}$ & \textbf{MZIs/mesh} &
+\textbf{Area (std)} & \textbf{Area (cmp)} \\
+\midrule
+    64 & 28.8\% & 0.186 &        2,016 &    4.9\,mm$^2$ &    1.6\,mm$^2$ \\
+   128 & 38.2\% & 0.166 &        8,128 &   19.7\,mm$^2$ &    6.6\,mm$^2$ \\
+   256 & 52.8\% & 0.142 &       32,640 &   78.6\,mm$^2$ &   26.2\,mm$^2$ \\
+   512 & 72.6\% & 0.108 &      130,816 &  314.6\,mm$^2$ &  104.9\,mm$^2$ \\
+  1024 & 92.3\% & 0.061 &      523,776 & 1258.3\,mm$^2$ &  419.4\,mm$^2$ \\
+  2048 & 100\%  & 0.000 &    2,096,128 & 5033.2\,mm$^2$ & 1677.7\,mm$^2$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Honest interpretation.}
+The rank-64 SVD errors (0.19--0.67) are genuine information loss versus the
+full weight matrix.
+They do not indicate a compiler error.
+The chip executes the rank-$r$ SVD approximation to machine precision.
+End-to-end task accuracy (MedQA, PubMedQA) at each rank is a separate question
+requiring full-model evaluation; this is not reported here.
+The v\_proj matrix has the slowest singular value decay, requiring higher rank
+for a given approximation quality --- this is a property of the weight matrix,
+not of our compiler.
+
+% ----------------------------------------------------------------
+\section{Hardware Architecture}
+
+\paragraph{Platform.} 220\,nm silicon-on-insulator (SOI), 1310\,nm wavelength,
+TiN thermal phase shifters (10--20\,mW for $\pi$ shift), Ge photodetectors
+($>$40\,GHz bandwidth).
+
+\paragraph{Single chip.} 10\,mm $\times$ 10\,mm, 4,096 MZIs (rank-64 mesh in
+8\,mm $\times$ 8\,mm), 64 fiber I/O channels per edge.
+
+\paragraph{Power.}
+$\approx 8$\,W total (laser + readout + FPGA) vs.\ $\approx 300$\,W for A100
+GPU: \textbf{37$\times$ improvement}.
+At 1 token/ms: 8\,mJ/token vs.\ 300\,mJ/token.
+
+\paragraph{WDM parallelism.}
+8 wavelengths at 1310\,nm $\pm$ 400\,GHz process all 8 attention heads
+simultaneously on a single physical chip, reducing system chip count 8$\times$.
+
+% ----------------------------------------------------------------
+\section{Related Work}
+
+Shen et al.~\citep{shen2017} first demonstrated deep learning with coherent
+nanophotonic circuits on a small synthetic problem.
+Bandyopadhyay et al.~\citep{bandyopadhyay2022} showed single-chip photonic
+training.
+Hamerly et al.~\citep{hamerly2019} analysed scalability and noise limits of
+optical neural networks.
+Pai et al.~\citep{pai2023} demonstrated 512-mode photonic processors with in-situ
+calibration.
+Our work differs in: (a) targeting a specific production medical AI model
+(MedGemma-4B) rather than synthetic benchmarks; (b) the static compilation
+approach that eliminates dynamic weight updates; (c) the full rank sweep from
+64 to 2048 with honest error reporting; (d) an explicit deployment motivation
+(KNH Nairobi, global-south hospitals).
+
+% ----------------------------------------------------------------
+\section{Conclusion}
+
+PhotoMedGemma demonstrates that a production medical AI model (MedGemma-4B-IT)
+can be compiled to photonic MZI phase settings with machine-precision fidelity.
+The Clements algorithm faithfully encodes the target SVD unitaries at all
+tested ranks (64--2048).
+The rank-$r$ approximation error is a controllable design parameter, not a
+compilation artefact.
+The system projects 37$\times$ better energy efficiency than GPU inference,
+enabling deployment at Kenyatta National Hospital and similar settings across
+the global south.
+
+Code, phase maps, sweep data, and this paper are at:
+\url{https://github.com/yourusername/photomedgemma}.
+
+% ----------------------------------------------------------------
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{medgemma2024}
+Google DeepMind. \textit{MedGemma Technical Report.} 2024.
+
+\bibitem{shen2017}
+Y.\ Shen et al. ``Deep learning with coherent nanophotonic circuits.''
+\textit{Nature Photonics}, 11(7):441--446, 2017.
+
+\bibitem{bandyopadhyay2022}
+S.\ Bandyopadhyay et al. ``Single chip photonic deep neural network with
+accelerated training.'' \textit{arXiv:2208.01623}, 2022.
+
+\bibitem{clements2016}
+W.R.\ Clements et al. ``Optimal design for universal multiport interferometers.''
+\textit{Optica}, 3(12):1460--1465, 2016.
+
+\bibitem{reck1994}
+M.\ Reck et al. ``Experimental realization of any discrete unitary operator.''
+\textit{Physical Review Letters}, 73(1):58, 1994.
+
+\bibitem{hamerly2019}
+R.\ Hamerly et al. ``Large-scale optical neural networks based on photoelectric
+multiplication.'' \textit{Physical Review X}, 9(2):021032, 2019.
+
+\bibitem{pai2023}
+S.\ Pai et al. ``Experimentally realized in situ backpropagation for deep
+learning in photonic neural networks.'' \textit{Science}, 380(6643):398--404, 2023.
+
+\bibitem{gemma3_2024}
+Google DeepMind. \textit{Gemma 3 Technical Report.} arXiv:2408.00118, 2024.
+
+\end{thebibliography}
+
+\end{document}

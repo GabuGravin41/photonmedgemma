@@ -26,8 +26,10 @@
        Medical AI Inference on Silicon Photonic Chips}
 
 \author{
-  Linda~H.
-  \thanks{Independent Research. E-mail: photomedgemma@github.com}
+  Dalton Omondi\\[2pt]
+  \small Electrical and Electronics Engineering, Kenyatta University\\[2pt]
+  \small \href{https://github.com/GabuGravin41/photonmedgemma}{github.com/GabuGravin41/photonmedgemma}
+  % \thanks{Independent Research. E-mail: photomedgemma@github.com}
 }
 
 % ----------------------------------------------------------------
@@ -72,12 +74,11 @@ multiplication with energy efficiency approaching the thermodynamic limit
 The SVD-Clements decomposition pipeline for mapping weight matrices to MZI
 meshes is well-established
 \cite{reck1994, clements2016, shen2017, bandyopadhyay2022, pai2023}.
-Our contribution is not the decomposition technique itself, but its
-\emph{application to a real, production-scale medical vision-language model}
-(MedGemma-4B-IT~\cite{medgemma2025}), with a complete rank sweep, honest
-error reporting, and an explicit deployment context in low-resource healthcare.
+Our contribution is the
+\emph{application of the decomposition to a real, production-scale medical vision-language model}
+(MedGemma-4B-IT~\cite{medgemma2025}), with a complete rank sweep, error reporting, and a deployment context in low-resource healthcare.
 
-For inference from fixed, trained models, the weight matrices are constant ---
+For inference from fixed, trained models, the weight matrices are constant --
 enabling \emph{static compilation}: the weights are encoded once into the
 phase settings of an MZI mesh and need not be updated during inference.
 This eliminates the dominant energy cost of electronic matrix multipliers
@@ -88,8 +89,8 @@ diagnostic reasoning tasks~\cite{medgemma2025}, but requires GPU
 infrastructure ($\sim300$\,W) incompatible with energy-constrained hospital
 deployments.
 The specific context motivating this work is Kenyatta National Hospital (KNH)
-in Nairobi, Kenya --- the largest referral hospital in East and Central Africa
---- where data sovereignty regulations prohibit cloud inference, and local
+in Nairobi, Kenya -- the largest referral hospital in East and Central Africa
+-- where data sovereignty regulations prohibit cloud inference, and local
 power infrastructure cannot support continuous GPU operation.
 
 We present PhotoMedGemma: an open-source compiler that translates MedGemma's
@@ -251,7 +252,7 @@ layer-0 attention projections (Q, K, V, O).
 Chip fidelity is at machine precision ($\approx 10^{-15}$) in all cases,
 confirming that the Clements algorithm faithfully encodes the target unitary
 in exact arithmetic (no optical loss or fabrication error modelled).
-The 4-bit NF4 weight extraction error is $< 0.22\%$ --- confirming
+The 4-bit NF4 weight extraction error is $< 0.22\%$ -- confirming
 that the compiled weights accurately represent the true MedGemma weights.
 
 \begin{table}[t]
@@ -343,8 +344,8 @@ Compact Si: 80\,\textmu m stage $\times$ 5\,\textmu m pitch per MZI.
 
 A rank-64 layer-0 attention block requires 8~chips (4~projections $\times$
 2~meshes/projection).
-With 8-wavelength WDM parallelism --- each of MedGemma's 8~attention heads
-processed on a separate wavelength through the \emph{same} physical mesh ---
+With 8-wavelength WDM parallelism -- each of MedGemma's 8~attention heads
+processed on a separate wavelength through the \emph{same} physical mesh --
 this reduces to 1~chip per projection = \textbf{4~chips} for the full layer-0
 attention block.
 
@@ -394,7 +395,7 @@ Memory (KV cache)        &   2\,W  & LPDDR5 \\
 \end{table}
 
 At 1~token/ms: \textbf{$\approx$8\,mJ/token} vs.\ 300\,mJ/token for A100
-GPU --- a projected $\sim36\times$ improvement in energy per token.
+GPU -- a projected $\sim36\times$ improvement in energy per token.
 This estimate is a lower bound on photonic advantage; real systems will incur
 additional overhead from optical losses, electronic readout noise, and thermal
 management (Section~\ref{sec:limitations}).
@@ -472,7 +473,7 @@ layer-level weight reconstruction fidelity, not downstream clinical
 task accuracy.
 Whether these errors degrade MedGemma's performance on MedQA, PubMedQA,
 or breast cancer classification requires propagating approximate weights
-through all 46~layers and evaluating on clinical benchmarks --- the subject
+through all 46~layers and evaluating on clinical benchmarks -- the subject
 of ongoing work.
 Only 5~activation samples (1~token per image) were captured; a thorough
 evaluation requires diverse clinical inputs and multi-token generation.

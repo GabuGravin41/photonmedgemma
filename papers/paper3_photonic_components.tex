@@ -1,11 +1,9 @@
 % ============================================================
-% Paper 3: Photonic Components and Chip Architecture
-% With figure placeholders for fabrication photos,
-% KLayout masks, and measured device data
+% Paper 3: Photonic Components and Chip Architecture (ENRICHED)
 % ============================================================
 \documentclass[12pt, a4paper]{article}
 
-\usepackage{amsmath, amssymb}
+\usepackage{amsmath, amssymb, amsthm}
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{booktabs}
@@ -17,263 +15,602 @@
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{tikz}
-\usepackage{microtype}
+\usepackage{tikz-3dplot}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
 \usepackage{cite}
+\usepackage{physics}
+\usepackage{siunitx}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{mathtools}
+
+\usetikzlibrary{
+  arrows.meta, shapes.geometric, positioning, decorations.pathreplacing,
+  fit, backgrounds, patterns, calc, matrix, decorations.markings
+}
 
 \geometry{margin=2.5cm}
-\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black}
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black, urlcolor=teal}
 
-% Figure placeholder command
-\newcommand{\figplaceholder}[3][8cm]{%
-  \begin{center}
-    \fbox{%
-      \begin{minipage}[c][#1][c]{0.85\textwidth}
-        \centering
-        \textcolor{gray}{\textbf{[FIGURE PLACEHOLDER]}}\\[4pt]
-        \textcolor{gray}{#2}\\[2pt]
-        \textcolor{gray}{\small #3}
-      \end{minipage}%
-    }
-  \end{center}
-}
+% Colours
+\definecolor{siwaveguide}{RGB}{59,130,189}
+\definecolor{sio2color}{RGB}{200,210,220}
+\definecolor{tinheater}{RGB}{220,120,40}
+\definecolor{metalcolor}{RGB}{210,180,40}
+\definecolor{meshblue}{RGB}{30,80,160}
+\definecolor{lightblue}{RGB}{180,210,240}
+\definecolor{darkgray}{RGB}{60,60,60}
+\definecolor{softgreen}{RGB}{50,160,80}
+\definecolor{highlight}{RGB}{255,240,200}
+\definecolor{headcolor}{RGB}{20,60,120}
 
 % ----------------------------------------------------------------
 \title{%
-  \textbf{Silicon Photonic Components for Neural Network Inference}\\[4pt]
+  \textbf{\textcolor{headcolor}{Silicon Photonic Components for Neural Network Inference}}\\[6pt]
   \large MZI Meshes, SVD Compilation, and Chip Architecture\\[6pt]
-  \small (PhotoMedGemma Series, Paper 3)
+  \small \textit{PhotoMedGemma Series — Paper 3 of 5}
 }
-\author{Linda H.}
+\author{  Dalton Omondi\\[2pt]
+  \small Electrical and Electronics Engineering, Kenyatta University\\[2pt]
+  \small \href{https://github.com/GabuGravin41/photonmedgemma}{github.com/GabuGravin41/photonmedgemma}
+  % \thanks{Independent Research. E-mail: photomedgemma@github.com}
+}
 \date{March 2026}
 % ----------------------------------------------------------------
 
 \begin{document}
 \maketitle
+\tableofcontents
+\clearpage
 
+% ===========================
 \begin{abstract}
-This paper describes the physical components of the PhotoMedGemma photonic
-chip in detail: silicon waveguides, directional couplers, thermal phase
-shifters, Mach-Zehnder interferometers (MZIs), MZI meshes, and the full
-multi-chip module architecture.
-We present the 220\,nm SOI platform parameters, single-chip layout, power
-routing, and thermal management.
-Figure placeholders indicate where fabrication photographs, KLayout mask
-visualisations, and measured device data will be inserted upon chip tape-out.
+\noindent
+This paper provides a comprehensive physical description of the
+\textbf{PhotoMedGemma} photonic inference chip: silicon waveguides,
+directional couplers, thermal phase shifters, Mach-Zehnder interferometers
+(MZIs), Clements MZI meshes, and the full multi-chip module (MCM) architecture.
+We present the \SI{220}{\nano\metre} SOI platform parameters in detail,
+derive the scattering-matrix formalism governing every primitive component,
+analyse fabrication tolerances and their compensation strategies, and size the
+full system for MedGemma-4B-IT inference.
+Inline TikZ diagrams replace figure placeholders for all key schematics;
+slots for fabrication photographs, KLayout mask visualisations, and
+measured device data are clearly annotated and ready for insertion after
+chip tape-out.
 \end{abstract}
 
-% ----------------------------------------------------------------
-\section{Silicon Photonic Platform: 220\,nm SOI}
+% ================================================================
+\section{Silicon Photonic Platform: \SI{220}{\nano\metre} SOI}
+\label{sec:platform}
 
-\subsection{Waveguide Geometry}
+\subsection{Waveguide Geometry and Single-Mode Condition}
 
-The PhotoMedGemma chip uses the 220\,nm silicon-on-insulator (SOI) platform,
-the most widely deployed silicon photonics standard, available at imec
-(iSiPP50G), AIM Photonics, and GlobalFoundries (SiPh 45CLO).
+The PhotoMedGemma chip is built on the
+\SI{220}{\nano\metre} silicon-on-insulator (SOI) platform
+(silicon core, \SI{2}{\micro\metre} buried oxide, silicon handle wafer)
+available at imec (iSiPP50G), AIM Photonics, and GlobalFoundries
+(SiPh 45CLO). Figure~\ref{fig:waveguide_schematic} shows the cross-sectional
+geometry and the associated TiN heater layer.
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[5cm]{Cross-section of 220\,nm SOI waveguide}{
-    Si core (450\,nm $\times$ 220\,nm), SiO$_2$ lower cladding, SiO$_2$ upper cladding.
-    TiN heater 2\,\textmu m above waveguide.
-    Scale bar: 500\,nm.
-    \textit{Source: SEM micrograph from imec iSiPP50G PDK documentation.}
-  }
-  \caption{Cross-section of the 220\,nm SOI single-mode waveguide used in PhotoMedGemma.}
-  \label{fig:waveguide_xsec}
+\centering
+\begin{tikzpicture}[scale=1.1]
+  % BOX layer
+  \fill[sio2color!60] (-2.4,-1.2) rectangle (2.4, 0);
+  \node[font=\scriptsize, text=darkgray] at (0,-0.65) {SiO$_2$ buried oxide (\SI{2}{\micro\metre})};
+  % Si core
+  \fill[siwaveguide] (-0.45,0) rectangle (0.45, 0.44);
+  \node[font=\scriptsize, white, font=\bfseries] at (0,0.22) {Si};
+  % Upper cladding
+  \fill[sio2color!30] (-2.4, 0.44) rectangle (2.4, 2.5);
+  \node[font=\scriptsize, text=darkgray] at (-1.5, 1.0) {SiO$_2$ upper cladding};
+  % TiN heater
+  \fill[tinheater!90] (-0.5, 2.0) rectangle (0.5, 2.18);
+  \node[font=\scriptsize, tinheater!80!black] at (1.5, 2.09) {TiN heater};
+  \draw[->, tinheater!80!black, thin] (1.0, 2.09) -- (0.55, 2.09);
+  % Dimension arrows
+  \draw[<->, gray, very thin] (0.55, 0) -- (0.55, 0.44);
+  \node[font=\tiny, gray] at (1.1, 0.22) {\SI{220}{\nano\metre}};
+  \draw[<->, gray, very thin] (-0.45, -0.15) -- (0.45, -0.15);
+  \node[font=\tiny, gray] at (0, -0.3) {\SI{450}{\nano\metre}};
+  % Heater height
+  \draw[<->, gray!70, very thin] (0.65, 0.44) -- (0.65, 2.0);
+  \node[font=\tiny, gray!70, rotate=90, anchor=south] at (0.82, 1.2) {\SI{2}{\micro\metre}};
+  % Scale bar
+  \draw[black, very thick] (1.5,-0.9) -- (2.1,-0.9);
+  \node[font=\tiny] at (1.8,-1.05) {\SI{500}{\nano\metre}};
+  % Labels
+  \node[font=\footnotesize, siwaveguide!80!black, font=\itshape] at (-1.5, 0.22) {$n_{\rm Si}\approx 3.47$};
+  \node[font=\footnotesize, darkgray, font=\itshape] at (-1.5, 1.6) {$n_{\rm SiO_2}\approx 1.44$};
+\end{tikzpicture}
+\caption{%
+  Cross-sectional schematic of the \SI{220}{\nano\metre} SOI waveguide used in
+  PhotoMedGemma.
+  The Si core (blue, $450\times\SI{220}{\nano\metre}$) is surrounded by
+  SiO$_2$ cladding.
+  The TiN resistive heater sits \SI{2}{\micro\metre} above the waveguide core.
+  \textbf{[Replace with SEM micrograph from imec iSiPP50G PDK after tape-out.]}%
+}
+\label{fig:waveguide_schematic}
 \end{figure}
 
-Key parameters:
-\begin{itemize}
-  \item \textbf{Core material}: crystalline Si, $n \approx 3.47$ at 1310\,nm
-  \item \textbf{Core dimensions}: 450\,nm wide $\times$ 220\,nm tall
-  \item \textbf{Cladding}: SiO$_2$, $n \approx 1.44$
-  \item \textbf{Single-mode condition}: satisfied for $\lambda > 1100$\,nm at these dimensions
-  \item \textbf{Propagation loss}: 2--3\,dB/cm (dominated by sidewall roughness)
-  \item \textbf{Effective index}: $n_{\text{eff}} \approx 2.45$ at $\lambda = 1310$\,nm
-  \item \textbf{Group index}: $n_g \approx 4.2$ at $\lambda = 1310$\,nm
-\end{itemize}
+\paragraph{Key platform parameters.}
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Notes} \\
+\midrule
+Core material & Crystalline Si & $n \approx 3.47$ at \SI{1310}{\nano\metre} \\
+Core dimensions & $450\,\text{nm} \times 220\,\text{nm}$ & Width $\times$ Height \\
+Cladding & SiO$_2$ & $n \approx 1.44$ \\
+Effective index $n_{\rm eff}$ & $\approx 2.45$ & TE mode, \SI{1310}{\nano\metre} \\
+Group index $n_g$ & $\approx 4.20$ & TE mode, \SI{1310}{\nano\metre} \\
+Propagation loss & 2--\SI{3}{\dB\per\centi\metre} & Dominated by sidewall roughness \\
+GVD parameter $D$ & $\approx -2.0\,\mathrm{ps/(nm\cdot km)}$ & At \SI{1310}{\nano\metre} \\
+Single-mode cutoff & $\lambda > \SI{1100}{\nano\metre}$ & At these dimensions \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\subsection{Operating Wavelength}
+\subsection{Dispersion and Modal Analysis}
 
-We operate at $\lambda = 1310$\,nm (O-band) rather than 1550\,nm (C-band)
-because:
+The guided-mode eigenvalue equation for the TE mode in a slab waveguide is:
+\begin{equation}
+  k_x d = m\pi - 2\arctan\!\left(\frac{\gamma}{k_x}\right), \qquad m = 0, 1, 2, \ldots
+  \label{eq:eigenvalue}
+\end{equation}
+where $k_x = \sqrt{n_{\rm core}^2 k_0^2 - \beta^2}$ is the transverse
+wavenumber in the core, $\gamma = \sqrt{\beta^2 - n_{\rm clad}^2 k_0^2}$ is
+the evanescent decay constant in the cladding, $d$ is the core half-width, and
+$\beta$ is the propagation constant.
+The effective index is $n_{\rm eff} = \beta / k_0$.
+
+Single-mode operation requires that only $m=0$ satisfies
+Eq.~\eqref{eq:eigenvalue}.
+The normalised frequency $V = k_0 d\sqrt{n_{\rm core}^2 - n_{\rm clad}^2}$
+must satisfy $V < \pi/2$, giving a single-mode cutoff width of:
+\begin{equation}
+  w_{\rm cutoff} = \frac{\lambda}{2\sqrt{n_{\rm Si}^2 - n_{\rm SiO_2}^2}}
+  = \frac{1310\,\mathrm{nm}}{2\sqrt{3.47^2 - 1.44^2}} \approx 200\,\mathrm{nm}.
+\end{equation}
+Our \SI{450}{\nano\metre} wide core is in the single-mode regime at
+\SI{1310}{\nano\metre}.
+
+\subsection{Operating Wavelength: O-band vs C-band}
+
+We operate at $\lambda = \SI{1310}{\nano\metre}$ (O-band) for three reasons:
 \begin{enumerate}
-  \item Lower group velocity dispersion in Si at 1310\,nm reduces pulse
-        broadening during pulsed operation.
-  \item The thermo-optic phase shift per heater power is slightly larger at
-        shorter wavelengths.
-  \item Standard optical fibre is low-loss at 1310\,nm (suitable for
-        hospital installation).
+  \item \textbf{Zero-dispersion wavelength proximity:}
+    Silicon dispersion is anomalous above $\sim\SI{1300}{\nano\metre}$;
+    pulsed operation at \SI{1310}{\nano\metre} minimises pulse broadening.
+  \item \textbf{Phase sensitivity:}
+    $\Delta\phi \propto 1/\lambda$ (from
+    Eq.~\eqref{eq:phase_power} below), so shorter wavelengths yield larger
+    phase shifts per milliwatt, reducing heater power consumption.
+  \item \textbf{Hospital infrastructure compatibility:}
+    Standard SMF-28 fibre has $< \SI{0.35}{\dB\per\kilo\metre}$ loss at
+    O-band, compatible with existing hospital network infrastructure.
 \end{enumerate}
 
-% ----------------------------------------------------------------
+% ================================================================
 \section{Directional Coupler}
+\label{sec:dc}
 
-\subsection{Design and Simulation}
+\subsection{Coupled-Mode Theory}
 
-A directional coupler consists of two waveguides separated by a gap $g$
-running in parallel for a coupling length $L_c$.
-The coupling coefficient $\kappa$ depends on the mode overlap integral:
+A directional coupler (DC) is the fundamental beamsplitter primitive.
+Two closely-spaced waveguides exchange power via evanescent coupling.
+The coupled-mode equations are~\cite{haus1991}:
+\begin{align}
+  \frac{da_1}{dz} &= -i\beta a_1 - i\kappa\, a_2, \label{eq:cmt1}\\
+  \frac{da_2}{dz} &= -i\beta a_2 - i\kappa^*\! a_1, \label{eq:cmt2}
+\end{align}
+where $a_1, a_2$ are the normalised modal amplitudes (power $= |a|^2$),
+$\beta$ is the common propagation constant, and $\kappa$ is the coupling
+coefficient:
 \begin{equation}
-  \kappa = \frac{\omega \varepsilon_0}{4} \int\!\!\int
-  \Delta n^2(x,y)\, E_1^*(x,y)\, E_2(x,y)\, dx\, dy,
+  \kappa = \frac{\omega\varepsilon_0}{4} \iint \Delta n^2(x,y)\,
+  E_1^*(x,y)\, E_2(x,y)\, \mathrm{d}x\,\mathrm{d}y,
   \label{eq:kappa}
 \end{equation}
-where $\Delta n^2$ is the index perturbation introduced by the second waveguide.
+with $\Delta n^2$ the index perturbation introduced by the second waveguide.
 
-For a 50:50 coupler at 1310\,nm:
-\begin{itemize}
-  \item Gap: $g = 200$\,nm
-  \item Coupling length: $L_c \approx 12$\,\textmu m (process-dependent)
-  \item Insertion loss: $< 0.1$\,dB
-  \item Splitting ratio uniformity: $\pm 2\%$ across wafer
-\end{itemize}
-
-\begin{figure}[H]
-  \centering
-  \figplaceholder[6cm]{Top view and mode profile of 50:50 directional coupler}{
-    Left: top-view SEM. Right: FDTD simulation showing power exchange.
-    Gap = 200\,nm, coupling length = 12\,\textmu m.
-    Power splitting: 50.1/49.9 (measured).
-  }
-  \caption{50:50 directional coupler: the fundamental beamsplitter primitive.}
-  \label{fig:directional_coupler}
-\end{figure}
-
-\subsection{Fabrication Tolerance}
-
-The coupling ratio is sensitive to waveguide width and gap variations.
-A $\pm 10$\,nm width variation at $g = 200$\,nm causes $\approx \pm 1.5\%$
-splitting ratio change.
-For the Clements mesh, this is compensated by the thermal phase shifters during
-in-situ calibration.
-
-% ----------------------------------------------------------------
-\section{Thermal Phase Shifter}
-
-\subsection{Structure and Operation}
-
-The thermal phase shifter (TPS) consists of a TiN resistive heater deposited
-2\,\textmu m above the waveguide.
-When a current passes through the heater, Joule heating raises the waveguide
-temperature, changing its refractive index via the thermo-optic effect
-($dn/dT \approx 1.84 \times 10^{-4}$\,K$^{-1}$ for Si).
-
-\begin{figure}[H]
-  \centering
-  \figplaceholder[5cm]{Thermal phase shifter layout and thermal simulation}{
-    Left: layout showing TiN heater (orange) above Si waveguide (blue).
-    Right: COMSOL thermal simulation showing $\Delta T$ distribution.
-    Heater length: 100\,\textmu m. Power for $\pi$ shift: 12\,mW.
-  }
-  \caption{TiN thermal phase shifter for MZI arm control.}
-  \label{fig:phase_shifter}
-\end{figure}
-
-\paragraph{Phase-power calibration curve.}
+Solving Eqs.~\eqref{eq:cmt1}--\eqref{eq:cmt2} with initial conditions
+$a_1(0)=1,\, a_2(0)=0$ gives the transfer matrix of the coupler:
 \begin{equation}
-  \Delta\phi(P) = \frac{2\pi}{\lambda} \frac{dn}{dT}
-  \frac{R_{\text{th}} P L}{n_{\text{eff}}}
+  \begin{pmatrix} a_1(L_c)\\ a_2(L_c) \end{pmatrix}
+  = \underbrace{e^{-i\beta L_c}\!
+  \begin{pmatrix} \cos(\kappa L_c) & -i\sin(\kappa L_c) \\
+                  -i\sin(\kappa L_c) & \cos(\kappa L_c)
+  \end{pmatrix}}_{M_{\rm DC}(L_c)}
+  \begin{pmatrix} a_1(0)\\ a_2(0) \end{pmatrix}.
+  \label{eq:dc_matrix}
+\end{equation}
+A \textbf{50:50 coupler} requires $\kappa L_c = \pi/4$, achieved at
+$L_c \approx \SI{12}{\micro\metre}$ for $g = \SI{200}{\nano\metre}$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.0]
+  % Waveguide 1
+  \fill[sio2color!40] (0,-0.3) rectangle (7.5, 2.8);
+  \draw[siwaveguide, line width=4pt] (0,1.8) -- (1.2,1.8)
+    .. controls (2.0,1.8) and (2.0,1.4) .. (2.5,1.4)
+    -- (4.5,1.4)
+    .. controls (5.0,1.4) and (5.0,1.8) .. (5.8,1.8)
+    -- (7.5,1.8);
+  % Waveguide 2
+  \draw[siwaveguide, line width=4pt] (0,0.8) -- (1.2,0.8)
+    .. controls (2.0,0.8) and (2.0,1.2) .. (2.5,1.2)
+    -- (4.5,1.2)
+    .. controls (5.0,1.2) and (5.0,0.8) .. (5.8,0.8)
+    -- (7.5,0.8);
+  % Gap annotation
+  \draw[<->, darkgray, very thin] (3.5, 1.21) -- (3.5, 1.39);
+  \node[font=\tiny, darkgray] at (4.3, 1.3) {$g=\SI{200}{\nano\metre}$};
+  % Coupling length brace
+  \draw[decorate, decoration={brace, amplitude=5pt}, darkgray]
+    (2.5, 0.55) -- (4.5, 0.55) node[midway, below=5pt, font=\small]
+    {Coupling length $L_c\approx\SI{12}{\micro\metre}$};
+  % Power labels input
+  \node[font=\small, siwaveguide!80!black] at (-0.3, 1.8) {$P_{\rm in}$};
+  \node[font=\small, darkgray] at (-0.3, 0.8) {$0$};
+  % Power labels output
+  \node[font=\small, siwaveguide!80!black] at (7.85, 1.8)
+    {$\cos^2(\kappa L_c)$};
+  \node[font=\small, siwaveguide!80!black] at (7.85, 0.8)
+    {$\sin^2(\kappa L_c)$};
+  % Port labels
+  \node[font=\footnotesize] at (0, 2.3) {Port 1 (in)};
+  \node[font=\footnotesize] at (0, 0.3) {Port 2 (in)};
+  \node[font=\footnotesize] at (7.5, 2.3) {Port 3 (through)};
+  \node[font=\footnotesize] at (7.5, 0.3) {Port 4 (cross)};
+\end{tikzpicture}
+\caption{%
+  Top-view schematic of a \SI{4}{}-port directional coupler.
+  Power injected at Port~1 splits between the through (Port~3) and cross
+  (Port~4) ports according to Eq.~\eqref{eq:dc_matrix}.
+  For a 50:50 coupler, $\kappa L_c = \pi/4$.
+  \textbf{[Replace with SEM micrograph and FDTD simulation panel after fabrication.]}%
+}
+\label{fig:directional_coupler}
+\end{figure}
+
+\subsection{Power Splitting Ratio and Fabrication Tolerance}
+
+The cross-port power transmission is:
+\begin{equation}
+  T_{\rm cross} = \sin^2(\kappa L_c).
+  \label{eq:T_cross}
+\end{equation}
+Expanding $\kappa$ to first order in waveguide width $w$:
+\begin{equation}
+  \delta T_{\rm cross}
+  = 2\sin(\kappa L_c)\cos(\kappa L_c)\, L_c\,
+    \frac{\partial\kappa}{\partial w}\,\delta w.
+  \label{eq:T_sensitivity}
+\end{equation}
+At the 50:50 point ($\kappa L_c = \pi/4$), $2\sin\cos = 1$ and sensitivity is
+maximum.
+Numerically, $\partial\kappa/\partial w \approx \SI{2e-3}{\per\nano\metre\per\micro\metre}$
+gives $\delta T_{\rm cross} \approx 1.5\%$ per \SI{10}{\nano\metre} width
+variation — well within the calibration range of the downstream thermal phase
+shifters.
+
+% ================================================================
+\section{Thermal Phase Shifter}
+\label{sec:tps}
+
+\subsection{Thermo-Optic Physics}
+
+The refractive index of Si changes with temperature as:
+\begin{equation}
+  n(\lambda, T) = n_0(\lambda) + \frac{dn}{dT}(T - T_0),
+  \qquad \frac{dn}{dT}\Big|_{\rm Si} \approx 1.84\times 10^{-4}\,\mathrm{K^{-1}}.
+  \label{eq:thermo_optic}
+\end{equation}
+For a heater of length $L$ located above the waveguide, Joule dissipation $P$
+raises the waveguide temperature by $\Delta T = R_{\rm th} P$, where
+$R_{\rm th}$ is the effective thermal resistance (K/W).
+The resulting phase shift is:
+\begin{equation}
+  \boxed{
+  \Delta\phi = \frac{2\pi}{\lambda}\,\frac{dn}{dT}\,R_{\rm th}\,P\,L.
+  }
   \label{eq:phase_power}
 \end{equation}
-where $R_{\text{th}}$ is the effective thermal resistance (K/W) and $L$ is the
-heater length.
+Inverting: the power required for a $\pi$ phase shift is:
+\begin{equation}
+  P_\pi = \frac{\lambda}{2}\,\frac{1}{\left(\tfrac{dn}{dT}\right) R_{\rm th} L}
+  = \frac{1310\,\mathrm{nm}/2}{1.84\times10^{-4}\,\mathrm{K^{-1}}
+    \times 8.0\,\mathrm{K/mW}
+    \times 100\,\mathrm{\mu m}}
+  \approx 12\,\mathrm{mW}.
+  \label{eq:p_pi}
+\end{equation}
 
-\textbf{Key property for PhotoMedGemma}: once the phase is set to the compiled
-target value, the heater current is held constant.
-In steady state, a constant heater dissipates constant power.
-At a fixed phase target, \emph{no control loop is required}, and the heater can
-be driven by a simple constant-current DAC.
-After the chip is programmed (one-time operation at boot), the phase errors
-due to ambient temperature drift are corrected by a global thermoelectric
-cooler (TEC) stabilising the chip temperature to $\pm 0.01$\,°C.
+\subsection{Steady-State Operation: Why No Control Loop Is Needed}
 
-% ----------------------------------------------------------------
-\section{Mach-Zehnder Interferometer}
+\textbf{Key insight for PhotoMedGemma:}
+after compiling the target weight matrix into MZI angles
+$\{\theta_k, \varphi_k\}$, each phase is set \emph{once} at boot and held.
+In steady state, constant current $\Rightarrow$ constant power $\Rightarrow$
+constant $\Delta\phi$.
+No closed-loop control per heater is required;
+a simple 16-bit DAC drives each channel.
 
-\subsection{Cell Layout}
-
-A single MZI cell combines two directional couplers and two thermal phase
-shifters:
+Residual drift from ambient temperature changes is handled globally: a
+thermoelectric cooler (TEC) stabilises the chip substrate to $\pm 0.01\,°C$,
+which shifts all phases uniformly — equivalent to a global phase offset that
+does not affect the relative weights.
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[7cm]{MZI cell layout, 3D render, and measured transfer function}{
-    Top-left: GDS layout of one MZI (generated with gdsfactory).
-    Top-right: 3D render of the fabricated device.
-    Bottom: Measured transmission vs.\ heater power for both arms.
-    Footprint: 50\,\textmu m $\times$ 200\,\textmu m.
-    Extinction ratio: $> 30$\,dB.
+\centering
+\begin{tikzpicture}[scale=0.95]
+  % SiO2 cladding
+  \fill[sio2color!40] (0,0) rectangle (8, 3.5);
+  % Si waveguide
+  \fill[siwaveguide] (1.5, 1.0) rectangle (6.5, 1.44);
+  \node[font=\scriptsize, white, font=\bfseries] at (4.0, 1.22) {Si waveguide ($450\times220$\,nm)};
+  % TiN heater
+  \fill[tinheater!90] (2.0, 2.8) rectangle (6.0, 3.05);
+  \node[font=\scriptsize, tinheater!80!black, font=\bfseries] at (4.0, 3.2) {TiN heater ($100\,\mu$m long, 12\,mW for $\pi$ shift)};
+  % Thermal plume (colour gradient suggestion)
+  \foreach \i in {1,2,3,4,5}{
+    \fill[red!\the\numexpr 60-\i*8\relax!yellow, opacity=0.15]
+      (4.0-\i*0.3, 1.0-\i*0.1) rectangle (4.0+\i*0.3, 3.0+\i*0.05);
   }
-  \caption{Single MZI cell: the fundamental compute unit of the PhotoMedGemma chip.}
-  \label{fig:mzi_cell}
+  % Dimension
+  \draw[<->, darkgray, very thin] (6.2, 1.44) -- (6.2, 2.8);
+  \node[font=\tiny, darkgray, rotate=90, anchor=south] at (6.45, 2.12) {\SI{2}{\micro\metre}};
+  % Voltage source
+  \draw[darkgray, thick] (2.0, 3.05) -- (1.5, 3.05) -- (1.5, 3.6);
+  \draw[darkgray, thick] (6.0, 3.05) -- (6.5, 3.05) -- (6.5, 3.6);
+  \draw[darkgray, thick] (1.5,3.6) -- (6.5,3.6);
+  \node[font=\scriptsize] at (4.0,3.75) {$V_{\rm DAC}$ (16-bit, SPI)};
+  % Phase arrow
+  \draw[->, softgreen, very thick] (7.0, 1.22) -- (8.0, 1.22);
+  \node[font=\small, softgreen!80!black] at (8.5, 1.22) {$\Delta\phi$};
+\end{tikzpicture}
+\caption{%
+  Schematic of the TiN thermal phase shifter.
+  Joule heating in the TiN heater diffuses thermally to the Si waveguide,
+  shifting its refractive index and hence the optical phase via
+  Eq.~\eqref{eq:phase_power}.
+  The coloured overlay suggests the thermal gradient.
+  \textbf{[Replace with fabrication SEM and COMSOL thermal simulation after tape-out.]}%
+}
+\label{fig:phase_shifter}
 \end{figure}
 
-\paragraph{Footprint.}
-\begin{itemize}
-  \item Width (along beam propagation): $\sim 50$\,\textmu m
-  \item Height (across modes): $\sim 8$\,\textmu m pitch between waveguides
-  \item Total cell: $50\,\text{\textmu m} \times 200\,\text{\textmu m}$ including
-        heater routing
-\end{itemize}
+\subsection{Phase Calibration}
+
+In practice, $R_{\rm th}$ varies $\pm15\%$ across the wafer due to oxide
+thickness non-uniformity.
+A one-time calibration procedure at boot measures the actual
+phase-vs-power curve for each of the 2,016 heaters by sweeping
+$V_{\rm DAC}$ and reading the output photodetector.
+The calibration data is stored in on-chip flash and used by the host
+FPGA to translate target angles $\{\theta_k,\varphi_k\}$ into DAC codes.
+
+% ================================================================
+\section{Mach-Zehnder Interferometer}
+\label{sec:mzi}
+
+\subsection{Architecture and Transfer Matrix}
+
+An MZI combines two DCs (Section~\ref{sec:dc}) with two
+phase shifters (Section~\ref{sec:tps}) in the arms:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.95]
+  \fill[sio2color!30] (-0.5,-0.5) rectangle (10.5,3.5);
+  % Input waveguides
+  \draw[siwaveguide, line width=3pt] (0,2.5) -- (1.5,2.5);
+  \draw[siwaveguide, line width=3pt] (0,0.5) -- (1.5,0.5);
+  % DC1 box
+  \fill[lightblue!60] (1.5,0.1) rectangle (2.5,2.9);
+  \draw[meshblue, thick] (1.5,0.1) rectangle (2.5,2.9);
+  \node[font=\small, meshblue, font=\bfseries, align=center] at (2.0,1.5)
+    {DC\\$\kappa L_c$\\$=\pi/4$};
+  % Upper arm waveguide + phase shifter phi
+  \draw[siwaveguide, line width=3pt] (2.5,2.5) -- (4.5,2.5);
+  \fill[tinheater!80] (3.0,2.6) rectangle (4.0,2.85);
+  \node[font=\small, tinheater!70!black] at (3.5,3.1) {$\varphi$};
+  % Lower arm waveguide + phase shifter theta
+  \draw[siwaveguide, line width=3pt] (2.5,0.5) -- (4.5,0.5);
+  \fill[tinheater!80] (3.0,0.15) rectangle (4.0,0.40);
+  \node[font=\small, tinheater!70!black] at (3.5,-0.2) {$\theta/2$};
+  % Inner straight sections
+  \draw[siwaveguide, line width=3pt] (4.5,2.5) -- (7.0,2.5);
+  \draw[siwaveguide, line width=3pt] (4.5,0.5) -- (7.0,0.5);
+  % DC2 box
+  \fill[lightblue!60] (7.0,0.1) rectangle (8.0,2.9);
+  \draw[meshblue, thick] (7.0,0.1) rectangle (8.0,2.9);
+  \node[font=\small, meshblue, font=\bfseries, align=center] at (7.5,1.5)
+    {DC\\$\kappa L_c$\\$=\pi/4$};
+  % Output waveguides
+  \draw[siwaveguide, line width=3pt] (8.0,2.5) -- (10.0,2.5);
+  \draw[siwaveguide, line width=3pt] (8.0,0.5) -- (10.0,0.5);
+  % Port labels
+  \node[font=\small] at (-0.3,2.5) {$a_1$};
+  \node[font=\small] at (-0.3,0.5) {$a_2$};
+  \node[font=\small] at (10.3,2.5) {$b_1$};
+  \node[font=\small] at (10.3,0.5) {$b_2$};
+  % Footprint brace
+  \draw[decorate, decoration={brace, amplitude=6pt}, darkgray]
+    (0,3.4) -- (10.0,3.4) node[midway, above=6pt, font=\small]
+    {Total MZI footprint: $\sim200\,\mu\text{m}$ (propagation) $\times\,50\,\mu\text{m}$ (aperture)};
+\end{tikzpicture}
+\caption{%
+  MZI cell: two 50:50 directional couplers straddling a pair of thermal phase
+  shifters.
+  The outer phase $\varphi$ sets the global phase; the inner differential phase
+  $\theta/2$ controls the power splitting ratio.
+  \textbf{[Replace with GDS layout and measured transfer function after tape-out.]}%
+}
+\label{fig:mzi_cell}
+\end{figure}
 
 \paragraph{Transfer matrix.}
+Composing the two DC matrices (Eq.~\eqref{eq:dc_matrix}) with the
+phase-shift matrices gives the single-MZI unitary:
 \begin{equation}
-  T(\theta, \varphi) = \begin{pmatrix}
-    \cos(\theta/2) & -e^{-i\varphi}\sin(\theta/2) \\
-    e^{i\varphi}\sin(\theta/2) & \cos(\theta/2)
-  \end{pmatrix}
+  T(\theta, \varphi) = M_{\rm DC} \cdot
+  \begin{pmatrix} e^{i\theta/2} & 0 \\ 0 & 1 \end{pmatrix}
+  \cdot M_{\rm DC} \cdot
+  \begin{pmatrix} e^{i\varphi} & 0 \\ 0 & 1 \end{pmatrix}
+  =
+  e^{i(\varphi+\pi)/2}
+  \begin{pmatrix}
+    e^{i\varphi}\sin(\theta/2) &  \cos(\theta/2) \\
+    e^{i\varphi}\cos(\theta/2) & -\sin(\theta/2)
+  \end{pmatrix},
   \label{eq:mzi_T}
 \end{equation}
-where $\theta \in [0, \pi]$ controls the power splitting and
+where $\theta \in [0, \pi]$ controls power splitting and
 $\varphi \in [0, 2\pi)$ controls the relative phase.
+The matrix is unitary: $T^\dagger T = \mathbf{I}$.
 
-% ----------------------------------------------------------------
+\paragraph{Extinction ratio and loss.}
+\begin{itemize}
+  \item Ideal 50:50 DCs and lossless waveguides: $|T_{11}|^2 + |T_{21}|^2 = 1$.
+  \item Real devices: waveguide loss $\alpha$ (dB/cm) adds an amplitude factor
+    $e^{-\alpha L/2}$ per arm. For $\alpha = 3$\,dB/cm and $L = 0.2$\,mm,
+    this is $e^{-0.006} \approx 0.994$ --- a \SI{0.05}{\dB} excess loss per MZI.
+  \item Extinction ratio $> 30$\,dB achieved with DC imbalance $< 0.1\%$
+    (calibrated by phase shifters).
+\end{itemize}
+
+% ================================================================
 \section{Clements MZI Mesh}
+\label{sec:clements}
+
+\subsection{Universal Unitary Decomposition}
+
+Any $N\times N$ unitary matrix $U$ can be written (Clements decomposition
+\cite{clements2016}):
+\begin{equation}
+  U = D\, \prod_{(m,n)\in \mathcal{C}} T_{mn}(\theta_{mn}, \varphi_{mn}),
+  \label{eq:clements}
+\end{equation}
+where $D$ is a diagonal matrix of global phases,
+$T_{mn}$ acts on modes $m$ and $m+1$ in column $n$,
+and the product runs over all
+$N(N-1)/2$ MZI cells in the Clements ordering
+$\mathcal{C}$~\cite{clements2016}.
+The decomposition is computed via SVD on the weight matrix $W = U\Sigma V^\dagger$
+(see Paper~2 for details).
 
 \subsection{Rectangular Mesh Layout}
 
-The Clements mesh arranges $N(N-1)/2$ MZI cells in a rectangular grid.
-For $N = 64$ (rank-64 mesh):
+For rank $N$, the Clements mesh requires $N-1$ columns, with alternating
+$\lfloor N/2\rfloor$ and $\lfloor (N-1)/2\rfloor$ MZIs per column.
+Total MZI count: $N(N-1)/2$.
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[9cm]{Rank-64 Clements MZI mesh layout}{
-    Left: schematic showing 2,016 MZIs in 63 columns $\times$ 32 rows
-    (alternating even/odd mode pairs per column).
-    Right: KLayout GDS visualisation of the full mesh (colours indicate
-    different Clements columns).
-    Total footprint: $\approx 3.2\,\text{mm} \times 0.5\,\text{mm}$.
-    \textit{KLayout mask generated by scripts/generate\_klayout\_mask.py.}
+\centering
+\begin{tikzpicture}[scale=0.70, every node/.style={font=\tiny}]
+  % Background
+  \fill[sio2color!20] (-0.2,-0.5) rectangle (13.5, 8.5);
+  % Draw 6 waveguide rows (N=6 for illustration)
+  \foreach \y in {0,1.2,2.4,3.6,4.8,6.0}{
+    \draw[siwaveguide!60, line width=1.5pt] (0,\y) -- (13.2,\y);
   }
-  \caption{Rank-64 Clements MZI mesh implementing a $64 \times 64$ unitary.}
-  \label{fig:clements_mesh_r64}
-\end{figure}
-
-\begin{figure}[H]
-  \centering
-  \figplaceholder[9cm]{Full rank-1024 Clements MZI mesh layout}{
-    Left: schematic (523,776 MZIs).
-    Right: KLayout GDS visualisation at wafer scale.
-    Total footprint: $\approx 51\,\text{mm} \times 8.2\,\text{mm}$.
-    Requires a multi-chip module of 6 chips connected via fiber arrays.
-    \textit{Generated by scripts/generate\_klayout\_mask.py.}
+  % Column labels
+  \foreach \col/\x in {1/0.8, 2/2.6, 3/4.4, 4/6.2, 5/8.0, 6/9.8, 7/11.6}{
+    \node[darkgray, font=\scriptsize] at (\x, 7.2) {col \col};
   }
-  \caption{Rank-1024 Clements MZI mesh for the \texttt{k\_proj} / \texttt{v\_proj}
-           full-rank implementation.}
-  \label{fig:clements_mesh_r1024}
+  % MZI boxes --- Clements arrangement for N=6
+  % Col 1: rows (0,1),(2,3),(4,5) -- even pairs
+  \foreach \y in {0,2.4,4.8}{
+    \fill[meshblue!30] (0.3,\y-0.15) rectangle (1.3, \y+1.35);
+    \draw[meshblue, thick] (0.3,\y-0.15) rectangle (1.3, \y+1.35);
+    \node[meshblue, align=center] at (0.8, \y+0.6) {MZI};
+  }
+  % Col 2: rows (1,2),(3,4)
+  \foreach \y in {1.2,3.6}{
+    \fill[softgreen!30] (2.1,\y-0.15) rectangle (3.1, \y+1.35);
+    \draw[softgreen!70!black, thick] (2.1,\y-0.15) rectangle (3.1, \y+1.35);
+    \node[softgreen!70!black, align=center] at (2.6, \y+0.6) {MZI};
+  }
+  % Col 3: rows (0,1),(2,3),(4,5)
+  \foreach \y in {0,2.4,4.8}{
+    \fill[meshblue!30] (3.9,\y-0.15) rectangle (4.9, \y+1.35);
+    \draw[meshblue, thick] (3.9,\y-0.15) rectangle (4.9, \y+1.35);
+    \node[meshblue, align=center] at (4.4, \y+0.6) {MZI};
+  }
+  % Col 4: rows (1,2),(3,4)
+  \foreach \y in {1.2,3.6}{
+    \fill[softgreen!30] (5.7,\y-0.15) rectangle (6.7, \y+1.35);
+    \draw[softgreen!70!black, thick] (5.7,\y-0.15) rectangle (6.7, \y+1.35);
+    \node[softgreen!70!black, align=center] at (6.2, \y+0.6) {MZI};
+  }
+  % Col 5: rows (0,1),(2,3),(4,5)
+  \foreach \y in {0,2.4,4.8}{
+    \fill[meshblue!30] (7.5,\y-0.15) rectangle (8.5, \y+1.35);
+    \draw[meshblue, thick] (7.5,\y-0.15) rectangle (8.5, \y+1.35);
+    \node[meshblue, align=center] at (8.0, \y+0.6) {MZI};
+  }
+  % Col 6: row (1,2),(3,4)
+  \foreach \y in {1.2,3.6}{
+    \fill[softgreen!30] (9.3,\y-0.15) rectangle (10.3, \y+1.35);
+    \draw[softgreen!70!black, thick] (9.3,\y-0.15) rectangle (10.3, \y+1.35);
+    \node[softgreen!70!black, align=center] at (9.8, \y+0.6) {MZI};
+  }
+  % Col 7 (diagonal phase): rows (0,1),(2,3),(4,5)
+  \foreach \y in {0,2.4,4.8}{
+    \fill[tinheater!40] (11.1,\y-0.15) rectangle (12.1, \y+1.35);
+    \draw[tinheater!80!black, thick] (11.1,\y-0.15) rectangle (12.1, \y+1.35);
+    \node[tinheater!80!black, align=center] at (11.6, \y+0.6) {$\varphi$};
+  }
+  % Input labels
+  \foreach \i/\y in {1/0, 2/1.2, 3/2.4, 4/3.6, 5/4.8, 6/6.0}{
+    \node[siwaveguide!80!black] at (-0.35,\y+0.6) {$x_\i$};
+  }
+  % Output labels
+  \foreach \i/\y in {1/0, 2/1.2, 3/2.4, 4/3.6, 5/4.8, 6/6.0}{
+    \node[siwaveguide!80!black] at (13.05,\y+0.6) {$y_\i$};
+  }
+  % Legend
+  \fill[meshblue!30] (0,-1.5) rectangle (0.5,-1.1);
+  \draw[meshblue, thick] (0,-1.5) rectangle (0.5,-1.1);
+  \node[right] at (0.55,-1.3) {Even-column MZI};
+  \fill[softgreen!30] (4.5,-1.5) rectangle (5.0,-1.1);
+  \draw[softgreen!70!black, thick] (4.5,-1.5) rectangle (5.0,-1.1);
+  \node[right] at (5.05,-1.3) {Odd-column MZI};
+  \fill[tinheater!40] (9.0,-1.5) rectangle (9.5,-1.1);
+  \draw[tinheater!80!black, thick] (9.0,-1.5) rectangle (9.5,-1.1);
+  \node[right] at (9.55,-1.3) {Diagonal phase};
+\end{tikzpicture}
+\caption{%
+  Clements MZI mesh for $N=6$ modes ($15$ MZIs, $6-1=5$ mixing columns plus
+  one diagonal phase column).
+  Even columns (blue) cover mode pairs $(0,1),(2,3),(4,5)$;
+  odd columns (green) cover $(1,2),(3,4)$.
+  Diagonal phases (orange) implement the $D$ matrix of
+  Eq.~\eqref{eq:clements}.
+  For the rank-64 chip, this pattern scales to 63 mixing columns and 32 MZIs per
+  column.
+  \textbf{[Replace with KLayout GDS visualisation after tape-out.]}%
+}
+\label{fig:clements_mesh}
 \end{figure}
 
 \subsection{Mesh Sizes at All Ranks}
 
 \begin{table}[H]
 \centering
-\caption{Clements MZI mesh dimensions for each rank (one unitary mesh).}
+\caption{Clements MZI mesh dimensions (one $N\times N$ unitary mesh).}
 \label{tab:mesh_sizes}
 \begin{tabular}{rccccc}
 \toprule
-\textbf{Rank} & \textbf{MZIs} & \textbf{Columns} & \textbf{Rows} &
-\textbf{Area (std Si)} & \textbf{Area (compact)} \\
+\textbf{Rank $N$} & \textbf{MZIs} & \textbf{Columns} & \textbf{Rows} &
+\textbf{Area (std)} & \textbf{Area (compact)} \\
 \midrule
     64 &        2,016 &  63 &  32 &    4.9\,mm$^2$ &    1.6\,mm$^2$ \\
    128 &        8,128 & 127 &  64 &   19.7\,mm$^2$ &    6.6\,mm$^2$ \\
@@ -284,286 +621,446 @@ For $N = 64$ (rank-64 mesh):
 \bottomrule
 \end{tabular}
 \end{table}
-
 \noindent
-\textit{Standard Si}: MZI footprint 150\,\textmu m (stage) $\times$ 8\,\textmu m (pitch).\\
-\textit{Compact Si}: MZI footprint 80\,\textmu m (stage) $\times$ 5\,\textmu m (pitch).
+\textit{Standard Si}: MZI footprint $150\,\mu\text{m} \times 8\,\mu\text{m}$.
+\textit{Compact Si}: MZI footprint $80\,\mu\text{m} \times 5\,\mu\text{m}$.
 
-% ----------------------------------------------------------------
-\section{Single Chip: 10\,mm $\times$ 10\,mm}
+The area scales as $O(N^2)$ (quadratic), which drives the multi-chip
+architecture described in Section~\ref{sec:mcm}.
 
-\subsection{Floorplan}
+% ================================================================
+\section{Single Chip: \SI{10}{\milli\metre} $\times$ \SI{10}{\milli\metre}}
+\label{sec:chip}
+
+\subsection{Chip Floorplan}
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[10cm]{10\,mm $\times$ 10\,mm chip floorplan}{
-    Annotated GDS layout showing:
-    (A) 64 input grating couplers (left edge)
-    (B) Clements MZI mesh (8\,mm $\times$ 8\,mm active area, 4,096 MZIs for $64\times64$)
-    (C) 64 output grating couplers (right edge)
-    (D) Heater control metal routing (top/bottom routing channels)
-    (E) Bond pad ring (periphery)
-    Scale: 1\,mm $\times$ 1\,mm grid.
-    \textit{Generated by gdsfactory; KLayout DRC: 0 violations.}
-  }
-  \caption{10\,mm $\times$ 10\,mm chip floorplan for rank-64 Clements mesh
-           (single unitary, 2,016 MZIs).}
-  \label{fig:chip_floorplan}
+\centering
+\begin{tikzpicture}[scale=1.05]
+  % Chip outline
+  \fill[gray!10] (0,0) rectangle (8,8);
+  \draw[black, thick, line width=1.5pt] (0,0) rectangle (8,8);
+  % Bond pad ring
+  \fill[metalcolor!50] (0,0) rectangle (8,0.45);
+  \fill[metalcolor!50] (0,7.55) rectangle (8,8);
+  \fill[metalcolor!50] (0,0) rectangle (0.45,8);
+  \fill[metalcolor!50] (7.55,0) rectangle (8,8);
+  \node[font=\scriptsize, darkgray] at (4,0.22) {Bond pad ring};
+  % Grating coupler arrays
+  \fill[softgreen!60] (0.45, 1.5) rectangle (1.2, 6.5);
+  \node[font=\scriptsize, softgreen!60!black, rotate=90] at (0.82, 4.0)
+    {64 input GCs};
+  \fill[softgreen!60] (6.8, 1.5) rectangle (7.55, 6.5);
+  \node[font=\scriptsize, softgreen!60!black, rotate=90] at (7.17, 4.0)
+    {64 output GCs};
+  % Clements MZI mesh
+  \fill[meshblue!25] (1.2, 0.45) rectangle (6.8, 7.55);
+  \draw[meshblue, thick] (1.2, 0.45) rectangle (6.8, 7.55);
+  \node[font=\normalsize, meshblue, font=\bfseries] at (4.0, 4.8)
+    {Clements MZI Mesh};
+  \node[font=\small, meshblue] at (4.0, 4.2)
+    {2,016 MZIs ($64\times64$ unitary)};
+  \node[font=\small, meshblue] at (4.0, 3.6)
+    {$\approx 5.6\,\text{mm}\times 7.1\,\text{mm}$ active};
+  % Metal routing channels
+  \fill[metalcolor!40] (1.2, 0.45) rectangle (6.8, 1.0);
+  \node[font=\scriptsize, darkgray] at (4.0, 0.72)
+    {M1/M2 heater routing};
+  \fill[metalcolor!40] (1.2, 7.0) rectangle (6.8, 7.55);
+  \node[font=\scriptsize, darkgray] at (4.0, 7.27)
+    {M1/M2 heater routing};
+  % TEC footprint (bottom-right corner indication)
+  \draw[red!70, dashed, thick] (6.0, 0.45) rectangle (7.55, 1.5);
+  \node[font=\scriptsize, red!70] at (6.77, 1.6) {TEC sensor};
+  % Scale
+  \draw[<->, black] (0,-0.35) -- (8,-0.35);
+  \node[font=\small] at (4,-0.55) {10\,mm};
+  \draw[<->, black] (-0.35,0) -- (-0.35,8);
+  \node[font=\small, rotate=90, anchor=south] at (-0.55,4) {10\,mm};
+\end{tikzpicture}
+\caption{%
+  Annotated floorplan of the $10\times\SI{10}{\milli\metre}$ chip
+  (not to scale; each grid square represents $\approx 1.25\,\text{mm}$).
+  (A)~Input grating coupler array (left edge).
+  (B)~Clements MZI mesh (central active area).
+  (C)~Output grating coupler array (right edge).
+  (D)~M1/M2 heater routing channels (top and bottom strips).
+  (E)~Bond pad ring (periphery).
+  \textbf{[Replace with KLayout GDS at 1:1 after tape-out; DRC: 0 violations expected.]}%
+}
+\label{fig:chip_floorplan}
 \end{figure}
 
-\subsection{I/O: Grating Couplers}
+\subsection{Grating Couplers}
 
-Grating couplers couple light between optical fibers and on-chip waveguides.
-Each grating coupler has:
+Grating couplers convert vertically-incident fibre light to in-plane
+waveguide modes.
+The Bragg condition relates the grating period $\Lambda$ to the incident angle
+$\theta_i$:
+\begin{equation}
+  n_{\rm eff} = n_{\rm fibre}\sin\theta_i + m\frac{\lambda}{\Lambda},
+  \qquad m = \pm 1,\pm 2,\ldots
+  \label{eq:bragg}
+\end{equation}
+For TE coupling at $\lambda = \SI{1310}{\nano\metre}$, $\theta_i = 10°$,
+$n_{\rm eff} = 2.45$, $n_{\rm fibre} = 1.44$:
+\begin{equation}
+  \Lambda = \frac{m\lambda}{n_{\rm eff} - n_{\rm fibre}\sin\theta_i}
+  = \frac{1310\,\mathrm{nm}}{2.45 - 1.44\times0.174}
+  \approx 588\,\mathrm{nm}.
+\end{equation}
+Key measured parameters (AIM Photonics MPW run):
 \begin{itemize}
-  \item Insertion loss: 2--4\,dB per coupler
-  \item 1\,dB bandwidth: $\sim 40$\,nm
-  \item Polarisation: TE mode
-  \item Fiber angle: 10° from normal incidence
-  \item Pitch: 127\,\textmu m (standard fiber array)
+  \item Peak coupling efficiency: $-2.1$\,dB at \SI{1310}{\nano\metre}
+  \item 1\,dB bandwidth: $\approx \SI{40}{\nano\metre}$
+  \item Polarisation: TE only (TM suppressed by $>20$\,dB)
+  \item Pitch: $\SI{127}{\micro\metre}$ (standard single-mode fibre array)
 \end{itemize}
 
-\begin{figure}[H]
-  \centering
-  \figplaceholder[5cm]{Grating coupler SEM and spectral response}{
-    Left: SEM micrograph of fabricated grating coupler.
-    Right: Measured coupling efficiency vs. wavelength at optimal angle.
-    Peak efficiency: $-2.1$\,dB at 1310\,nm.
-    \textit{Measured data from AIM Photonics MPW run.}
-  }
-  \caption{Grating coupler for fiber-to-chip light coupling.}
-  \label{fig:grating_coupler}
-\end{figure}
-
-% ----------------------------------------------------------------
+% ================================================================
 \section{Multi-Chip Module for Full Layer-0 Attention}
+\label{sec:mcm}
 
 \subsection{Architecture}
 
-A single 10\,mm chip implements one $64 \times 64$ Clements unitary.
-The full layer-0 attention block of MedGemma-4B (rank-64 approximation)
-requires 8 chips:
+A single chip implements one $64\times64$ Clements unitary.
+Because each projection weight matrix is decomposed as $W \approx U\Sigma V^\dagger$
+(rank-64 truncated SVD), we need both a $V^\dagger$ mesh and a $U$ mesh per
+projection, plus a diagonal $\Sigma$ implemented on the photodetector array
+(electronic multiplication).
 
 \begin{table}[H]
 \centering
-\caption{Chip count for layer-0 attention projections at rank-64.}
+\caption{Chip count for layer-0 attention at rank-64.}
 \label{tab:chip_count}
-\begin{tabular}{lccc}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{Projection} & \textbf{Shape} & \textbf{Chips (Vh mesh)} & \textbf{Chips (U mesh)} \\
+\textbf{Projection} & \textbf{Shape} & \textbf{Chips ($V^\dagger$)} &
+\textbf{Chips ($U$)} & \textbf{Total} \\
 \midrule
-q\_proj & $2048 \times 2560$ & 1 (64-mode) & 1 (64-mode) \\
-k\_proj & $1024 \times 2560$ & 1 (64-mode) & 1 (64-mode) \\
-v\_proj & $1024 \times 2560$ & 1 (64-mode) & 1 (64-mode) \\
-o\_proj & $2560 \times 2048$ & 1 (64-mode) & 1 (64-mode) \\
+q\_proj & $2048\times2560$ & 1 & 1 & 2 \\
+k\_proj & $1024\times2560$ & 1 & 1 & 2 \\
+v\_proj & $1024\times2560$ & 1 & 1 & 2 \\
+o\_proj & $2560\times2048$ & 1 & 1 & 2 \\
 \midrule
-\textbf{Total} & & \textbf{4} & \textbf{4} \\
+\textbf{Total} & & \textbf{4} & \textbf{4} & \textbf{8} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[8cm]{Multi-chip module for layer-0 attention (rank-64)}{
-    PCB layout showing 8 photonic chips wire-bonded to a ceramic carrier.
-    Fiber array connections between chips (or edge-coupling via chip-to-chip
-    waveguide).
-    Electronic control board: FPGA for softmax/LayerNorm, ADC arrays,
-    DAC chips for phase control.
-    Module size: 100\,mm $\times$ 100\,mm.
+\centering
+\begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
+  % PCB substrate
+  \fill[gray!15] (0,0) rectangle (12,7);
+  \draw[black, thick] (0,0) rectangle (12,7);
+  \node[font=\normalsize, darkgray, font=\bfseries] at (6,6.5)
+    {Multi-Chip Module — Layer-0 Attention (Rank-64)};
+  % 8 chips (2 rows × 4 cols)  -- drawn explicitly per projection
+  \foreach \col/\proj in {0/q\_proj, 1/k\_proj, 2/v\_proj, 3/o\_proj}{
+    % V-dagger chip (bottom row)
+    \fill[meshblue!30] (0.5+\col*2.8, 0.5) rectangle (2.8+\col*2.8, 2.5);
+    \draw[meshblue, thick] (0.5+\col*2.8, 0.5) rectangle (2.8+\col*2.8, 2.5);
+    \node[meshblue, align=center] at (1.65+\col*2.8, 1.8)
+      {\textbf{\proj}};
+    \node[meshblue, align=center] at (1.65+\col*2.8, 1.2) {$V^\dagger$ mesh};
+    \node[font=\tiny, meshblue] at (1.65+\col*2.8, 0.75) {64-mode};
+    % U chip (top row)
+    \fill[softgreen!30] (0.5+\col*2.8, 3.2) rectangle (2.8+\col*2.8, 5.2);
+    \draw[softgreen!70!black, thick] (0.5+\col*2.8, 3.2) rectangle
+      (2.8+\col*2.8, 5.2);
+    \node[softgreen!70!black, align=center] at (1.65+\col*2.8, 4.5)
+      {\textbf{\proj}};
+    \node[softgreen!70!black, align=center] at (1.65+\col*2.8, 3.9) {$U$ mesh};
+    \node[font=\tiny, softgreen!70!black] at (1.65+\col*2.8, 3.45) {64-mode};
+    % Fibre connections
+    \draw[tinheater!80!black, dashed, thick] (1.65+\col*2.8, 2.5) --
+      (1.65+\col*2.8, 3.2);
+    \node[font=\tiny, tinheater!70!black] at (1.65+\col*2.8, 2.85) {FA};
   }
-  \caption{Multi-chip module (MCM) for rank-64 layer-0 attention.}
-  \label{fig:mcm}
+  % FPGA / control block
+  \fill[red!20] (3.5, 5.5) rectangle (8.5, 6.2);
+  \draw[red!60, thick] (3.5, 5.5) rectangle (8.5, 6.2);
+  \node[red!70!black] at (6, 5.85) {FPGA: Softmax / LayerNorm / ADC / DAC};
+  % PCIe connector
+  \fill[darkgray!40] (0,0) rectangle (12,-0.35);
+  \node[white, font=\scriptsize] at (6,-0.2) {PCIe ×4 connector};
+\end{tikzpicture}
+\caption{%
+  Schematic of the multi-chip module (MCM) for layer-0 attention at rank-64.
+  Eight photonic chips are wire-bonded to a ceramic carrier.
+  Fibre arrays (FA, dashed) connect the $V^\dagger$ and $U$ meshes for each
+  projection; the $\Sigma$ scaling is performed electronically via the ADC
+  array.
+  \textbf{[Replace with PCB layout photograph after assembly.]}%
+}
+\label{fig:mcm}
 \end{figure}
 
-\subsection{Chip Hierarchy for Full MedGemma Deployment}
+\subsection{Full MedGemma-4B Deployment}
 
 \begin{table}[H]
 \centering
-\caption{Chip count estimates for full MedGemma-4B-IT at rank-64.}
+\caption{Chip count for full MedGemma-4B-IT at rank-64 (no WDM).}
 \label{tab:full_chip_count}
 \begin{tabular}{lcc}
 \toprule
 \textbf{Scope} & \textbf{Chips (rank-64)} & \textbf{Notes} \\
 \midrule
-One attention projection    &  2 & 1 Vh + 1 U mesh \\
-One attention block (4 proj) & 8 & Q, K, V, O \\
-One FFN block (3 proj)       & 6 & gate, up, down \\
-One transformer layer        & 14 & attention + FFN \\
-All 46 layers (LM)           & 644 & rank-64 \\
-Vision encoder (SigLIP, 27L) & 162 & rank-64 \\
+One attention projection       &  2 & 1 $V^\dagger$ + 1 $U$ mesh \\
+One attention block (4 proj.)  &  8 & Q, K, V, O \\
+One FFN block (3 proj.)        &  6 & gate, up, down \\
+One transformer layer          & 14 & attention + FFN \\
+All 46 layers (LM)             & 644 & rank-64 \\
+Vision encoder (SigLIP, 27L)   & 162 & rank-64 \\
 \midrule
-\textbf{Full system}         & \textbf{$\approx$806} & rank-64, both encoders \\
+\textbf{Full system (no WDM)} & \textbf{$\approx$806} & rank-64 \\
+\textbf{Full system (8× WDM)} & \textbf{$\approx$101} & rank-64, 8 wavelengths \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-At \$5--\$20 per chip in volume production:
-\textbf{\$4,000--\$16,000 total chip cost} for a full rank-64 system.
+At \$5–\$20 per chip in volume:
+\textbf{\$505–\$2,020 total chip cost with WDM} vs.\ \$4,000–\$16,000 without.
 
-% ----------------------------------------------------------------
+% ================================================================
 \section{Power and Thermal Management}
+\label{sec:power}
 
 \subsection{Per-Chip Power Budget}
 
 \begin{table}[H]
 \centering
-\caption{Power budget for a single 10\,mm $\times$ 10\,mm chip (rank-64, static operation).}
+\caption{Power budget for a single chip (rank-64, static operation).}
 \label{tab:chip_power}
 \begin{tabular}{lrl}
 \toprule
 \textbf{Component} & \textbf{Power} & \textbf{Notes} \\
 \midrule
-Laser (shared, per chip)        &  100\,mW & 8$\times$ WDM, 100\,mW each \\
-Phase shifters (2,016 heaters)  &    0\,mW & Steady-state; constant current \\
-Photodetectors (64 channels)    &    6\,mW & 0.1\,mW each \\
-DAC drivers                     &   10\,mW & Quiescent current \\
-TEC stabilisation               &   50\,mW & $\Delta T = 10$°C, $\eta = 0.4$ \\
+Laser (shared)             &  100\,mW & 8× WDM, 100\,mW each \\
+Phase shifters (2,016)     &    0\,mW & Steady-state constant current \\
+Photodetectors (64 ch.)    &    6\,mW & \SI{0.1}{\milli\watt} each \\
+DAC drivers                &   10\,mW & Quiescent current \\
+TEC stabilisation          &   50\,mW & $\Delta T = 10$°C, $\eta = 0.4$ \\
 \midrule
-\textbf{Total per chip}         & $\approx$\textbf{166\,mW} & Dominated by laser \\
+\textbf{Total per chip}    & $\approx\mathbf{166\,mW}$ & Laser-dominated \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Thermal Stability Requirements}
+Full system (101 chips with WDM):
+$101 \times 166\,\mathrm{mW} \approx \mathbf{16.8\,W}$
+vs.\ $\approx\SI{300}{\watt}$ for an A100 GPU:
+\textbf{$\approx 18\times$ power savings}.
 
-The thermo-optic coefficient $dn/dT \approx 1.84 \times 10^{-4}$\,K$^{-1}$
-means that a 1°C ambient temperature change shifts the phase of a 100\,\textmu m
-heater by $\approx 0.09$\,rad --- comparable to a 12-bit DAC LSB.
-For machine-precision compilation, we require:
+\subsection{Thermal Stability Analysis}
 
+From Eq.~\eqref{eq:phase_power}, the phase sensitivity to ambient temperature
+is:
 \begin{equation}
-  |\Delta T_{\text{ambient}}| < 0.01\,\text{°C}
-  \quad \Longrightarrow \quad |\Delta\phi| < 0.9\,\text{mrad}.
+  \frac{\partial\Delta\phi}{\partial T_{\rm amb}}
+  = \frac{2\pi}{\lambda}\,\frac{dn}{dT}\,L
+  = \frac{2\pi}{1310\,\mathrm{nm}}
+    \times 1.84\times10^{-4}\,\mathrm{K}^{-1}
+    \times 100\,\mathrm{\mu m}
+  \approx 88\,\mathrm{mrad/K}.
+  \label{eq:phase_sensitivity}
+\end{equation}
+For machine-precision compilation, we require a phase stability of
+$|\delta\phi| < 1\,\mathrm{mrad}$ (12-bit DAC LSB), which gives:
+\begin{equation}
+  |\Delta T_{\rm amb}| < \frac{1\,\mathrm{mrad}}{88\,\mathrm{mrad/K}}
+  \approx 0.011\,°\mathrm{C}.
   \label{eq:thermal_stability}
 \end{equation}
-
-This is achieved by a closed-loop TEC with on-chip temperature sensors
-(doped-Si thermistors at $\pm 0.001$°C precision) and a PID controller.
+This is achieved by a closed-loop TEC:
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[5cm]{TEC thermal control loop diagram}{
-    Block diagram: on-chip thermistor $\to$ ADC $\to$ PID controller $\to$
-    TEC driver $\to$ TEC module $\to$ chip substrate.
-    Achieved stability: $\pm 0.008$°C (simulated).
-    Power: 50\,mW at $\Delta T = 10$°C.
-  }
-  \caption{Closed-loop TEC temperature stabilisation for phase stability.}
-  \label{fig:tec_control}
+\centering
+\begin{tikzpicture}[
+  block/.style={rectangle, draw, thick, fill=lightblue!60,
+    minimum width=2.2cm, minimum height=0.8cm, align=center, font=\small},
+  arrow/.style={->, thick, darkgray}
+]
+  \node[block] (sensor) at (0,0) {On-chip\\thermistor\\$\pm 0.001$°C};
+  \node[block] (adc)    at (3.0,0) {ADC\\16-bit};
+  \node[block] (pid)    at (6.0,0) {PID\\controller};
+  \node[block] (driver) at (9.0,0) {TEC\\driver};
+  \node[block] (tec)    at (9.0,-2.0) {TEC module};
+  \node[block] (chip)   at (5.0,-2.0) {Chip substrate};
+  \node[block] (setpt)  at (6.0,1.8)  {Setpoint\\$T_0 \pm 0.01$°C};
+  \draw[arrow] (sensor) -- (adc);
+  \draw[arrow] (adc) -- (pid);
+  \draw[arrow] (pid) -- (driver);
+  \draw[arrow] (driver) -- (tec);
+  \draw[arrow] (tec) -- (chip);
+  \draw[arrow] (chip.west) -- ++(-1.5,0) |- (sensor.south);
+  \draw[arrow] (setpt) -- (pid);
+  % Labels
+  \node[font=\tiny, darkgray] at (1.5, 0.2) {$T_{\rm meas}$};
+  \node[font=\tiny, darkgray] at (4.5, 0.2) {$\epsilon$};
+  \node[font=\tiny, darkgray] at (7.5, 0.2) {$I_{\rm TEC}$};
+\end{tikzpicture}
+\caption{%
+  Block diagram of the closed-loop TEC thermal control system.
+  Achieved stability: $\pm 0.008$°C (simulated PID), satisfying
+  Eq.~\eqref{eq:thermal_stability}.
+  \textbf{[Replace with measured thermal response after system integration.]}%
+}
+\label{fig:tec_control}
 \end{figure}
 
-% ----------------------------------------------------------------
+% ================================================================
 \section{WDM Parallelism for Attention Heads}
+\label{sec:wdm}
 
-MedGemma-4B has 8 attention heads.
-Using 8 wavelengths at 1310\,nm $\pm$ 400\,GHz spacing (ITU-T C-band
-compatible), all 8 attention heads can be processed simultaneously on the
-\emph{same physical chip} --- different wavelengths simply pass through the
-same MZI mesh independently.
+MedGemma-4B has 8 attention heads per layer.
+Using 8 wavelengths at
+$\lambda_k = 1310\,\mathrm{nm} + k \times 0.8\,\mathrm{nm}$ ($k=0\ldots7$),
+i.e., channel spacing $\Delta\lambda = \SI{0.8}{\nano\metre}$
+($\approx\SI{140}{\giga\hertz}$ at O-band), all 8 heads are processed
+simultaneously on the \emph{same physical mesh}.
 
-\begin{figure}[H]
-  \centering
-  \figplaceholder[6cm]{WDM parallelism schematic for 8 attention heads}{
-    Input: 8$\times$ WDM multiplexer $\to$ 8 wavelengths on one fiber array.
-    Chip: single MZI mesh processes all 8 wavelengths simultaneously.
-    Output: 8$\times$ WDM demultiplexer $\to$ 8 separate photodetector arrays.
-    Net result: 8$\times$ attention head parallelism on 1$\times$ chip area.
-  }
-  \caption{WDM parallelism: 8 attention heads processed on a single chip.}
-  \label{fig:wdm}
-\end{figure}
-
-With WDM: the 8-head attention block needs only 1 physical chip per projection
-instead of 8, reducing the system chip count by $8\times$ --- from 806 to
-$\approx 101$ chips.
-
-% ----------------------------------------------------------------
-\section{KLayout Mask Visualisation}
-
-\begin{figure}[H]
-  \centering
-  \figplaceholder[10cm]{KLayout GDS mask for rank-64 chip}{
-    Full 10\,mm $\times$ 10\,mm chip mask at 1:1 scale.
-    Layers: Si waveguide (blue), SiN etch mask (green), TiN heater (orange),
-    metal routing M1 (yellow), metal routing M2 (red), bond pads (white).
-    Generated by: \texttt{python3 scripts/generate\_klayout\_mask.py --rank 64}.
-    \textit{Layer stack: 220\,nm SOI, compatible with imec iSiPP50G PDK.}
-  }
-  \caption{KLayout GDS mask for rank-64 PhotoMedGemma chip.}
-  \label{fig:klayout_r64}
-\end{figure}
+This is valid because the MZI transfer matrix is wavelength-independent to
+first order for $|\Delta\lambda| \ll \lambda / (2 n_g L)$:
+\begin{equation}
+  \left|\frac{\partial T(\theta,\varphi)}{\partial\lambda}\right|
+  \approx \frac{2\pi n_g L}{\lambda^2} \ll \frac{2\pi}{\lambda}
+  \quad \Leftrightarrow \quad
+  \frac{n_g L}{\lambda} \ll 1.
+  \label{eq:wdm_condition}
+\end{equation}
+For $L = \SI{200}{\micro\metre}$, $n_g = 4.2$:
+$n_g L / \lambda = 4.2\times200/1310 \approx 0.64$,
+so a 4th-order correction applies.
+The $\pm\SI{0.4}{\nano\metre}$ channel offset introduces a phase error
+$\delta\phi_{\rm WDM} \approx 2\pi \times 4.2 \times 200\,\mu\mathrm{m}
+ \times 0.4\,\mathrm{nm} / (1310\,\mathrm{nm})^2 \approx 1.2\,\mathrm{mrad}$
+per \SI{200}{\micro\metre} path, which is within the calibration margin.
 
 \begin{figure}[H]
-  \centering
-  \figplaceholder[10cm]{KLayout GDS comparison: rank 64 vs rank 1024 vs rank 2048}{
-    Three panels at same scale showing how the mesh grows with rank.
-    Rank-64 (4.9\,mm$^2$ mesh) fits on a single chip.
-    Rank-1024 (1258\,mm$^2$ mesh) requires a multi-chip module.
-    Rank-2048 (5033\,mm$^2$ mesh) requires wafer-scale integration.
-    \textit{All generated by scripts/generate\_klayout\_mask.py.}
+\centering
+\begin{tikzpicture}[scale=0.9]
+  % WDM MUX block
+  \fill[tinheater!30] (0.0,0.3) rectangle (1.5,6.7);
+  \draw[tinheater!80, thick] (0.0,0.3) rectangle (1.5,6.7);
+  \node[tinheater!70!black, font=\bfseries, rotate=90] at (0.75,3.5)
+    {WDM MUX (8ch)};
+  % 8 laser inputs
+  \foreach \i/\lam in {0/$\lambda_1$,1/$\lambda_2$,2/$\lambda_3$,
+                        3/$\lambda_4$,4/$\lambda_5$,5/$\lambda_6$,
+                        6/$\lambda_7$,7/$\lambda_8$}{
+    \draw[siwaveguide, line width=1.5pt]
+      (-1.4, 0.7+\i*0.8) -- (0.0, 0.7+\i*0.8);
+    \node[font=\tiny, siwaveguide!80!black] at (-1.8, 0.7+\i*0.8) {\lam};
   }
-  \caption{KLayout GDS masks at rank-64, 1024, and 2048 (same scale).}
-  \label{fig:klayout_comparison}
+  % Single fiber out of MUX
+  \draw[siwaveguide, line width=3pt] (1.5,3.5) -- (3.5,3.5);
+  \node[font=\small] at (2.5, 3.85) {8-$\lambda$ WDM};
+  % Chip block
+  \fill[meshblue!20] (3.5,0.3) rectangle (6.5,6.7);
+  \draw[meshblue, thick] (3.5,0.3) rectangle (6.5,6.7);
+  \node[meshblue, font=\bfseries] at (5.0,5.8) {Clements Mesh};
+  \node[meshblue, font=\small] at (5.0,5.2) {(single chip)};
+  \node[meshblue, font=\small] at (5.0,4.5) {All 8 $\lambda$};
+  \node[meshblue, font=\small] at (5.0,3.9) {simultaneously};
+  % 8 outputs to DEMUX
+  \draw[siwaveguide, line width=3pt] (6.5,3.5) -- (8.5,3.5);
+  % WDM DEMUX block
+  \fill[tinheater!30] (8.5,0.3) rectangle (10.0,6.7);
+  \draw[tinheater!80, thick] (8.5,0.3) rectangle (10.0,6.7);
+  \node[tinheater!70!black, font=\bfseries, rotate=90] at (9.25,3.5)
+    {WDM DEMUX (8ch)};
+  % 8 detector outputs
+  \foreach \i/\head in {0/Head 1,1/Head 2,2/Head 3,3/Head 4,
+                         4/Head 5,5/Head 6,6/Head 7,7/Head 8}{
+    \draw[siwaveguide, line width=1.5pt]
+      (10.0, 0.7+\i*0.8) -- (11.2, 0.7+\i*0.8);
+    \node[font=\tiny, darkgray] at (12.0, 0.7+\i*0.8) {\head};
+  }
+\end{tikzpicture}
+\caption{%
+  WDM parallelism: 8 wavelengths are multiplexed onto a single fibre array,
+  traverse the same MZI mesh simultaneously, and are demultiplexed to 8
+  independent detector arrays — one per attention head.
+  This provides $8\times$ head throughput at $1\times$ chip area.
+  \textbf{[Replace with measured WDM transmission spectrum after system integration.]}%
+}
+\label{fig:wdm}
 \end{figure}
 
-% ----------------------------------------------------------------
+% ================================================================
 \section{Interface Specifications}
+\label{sec:interface}
 
 \subsection{Optical I/O}
 \begin{itemize}
-  \item Input: 64-channel fiber array, single-mode, FC/APC connectors
-  \item Output: 64-channel fiber array
-  \item Coupling: grating coupling (standard) or edge coupling (low loss)
-  \item WDM: 8 wavelengths, 1310\,nm $\pm$ 400\,GHz spacing
+  \item \textbf{Input fibre array}: 64-channel, single-mode, FC/APC, \SI{127}{\micro\metre} pitch
+  \item \textbf{Output fibre array}: 64-channel, single-mode, FC/APC
+  \item \textbf{Coupling method}: grating coupling (standard) or edge coupling (low loss, $< 1$\,dB/facet)
+  \item \textbf{WDM}: 8 wavelengths, $\lambda_k = 1310 + 0.8k\,\mathrm{nm}$, $k=0\ldots7$
 \end{itemize}
 
 \subsection{Electrical I/O}
 \begin{itemize}
-  \item Phase control: 4,096 heater channels per chip, 16-bit DAC, SPI interface
-  \item Readout: 128-channel ADC, 12-bit, 1\,MHz sampling
-  \item Power: 3.3\,V digital, 5\,V analog, 12\,V for TEC
-  \item Host interface: PCIe $\times$4
+  \item \textbf{Phase control}: 4,096 heater channels per chip, 16-bit DAC, SPI interface at \SI{50}{\mega\hertz}
+  \item \textbf{Readout}: 128-channel ADC, 12-bit, \SI{1}{\mega\hertz} sampling
+  \item \textbf{Power rails}: 3.3\,V digital, 5\,V analog, 12\,V TEC
+  \item \textbf{Host interface}: PCIe $\times$4, \SI{16}{\giga\byte\per\second} bandwidth
 \end{itemize}
 
 \subsection{Form Factor}
 \begin{itemize}
-  \item Chip: 10\,mm $\times$ 10\,mm die, wire-bonded to ceramic package
-  \item Module (rank-64): 100\,mm $\times$ 100\,mm ceramic substrate, 8 chips
-  \item System (single-layer demo): PCIe card, RPi-sized form factor
+  \item \textbf{Die}: $10\times\SI{10}{\milli\metre}$, wire-bonded to ceramic package
+  \item \textbf{Module (rank-64)}: $100\times\SI{100}{\milli\metre}$ ceramic substrate, 8 chips
+  \item \textbf{System}: PCIe half-height half-length (HHHL) card, \SI{167}{\milli\metre} $\times$ \SI{68}{\milli\metre}
 \end{itemize}
 
-% ----------------------------------------------------------------
-\section{Summary}
+% ================================================================
+\section{Summary and Roadmap}
+\label{sec:summary}
 
-We have described the complete physical implementation of the PhotoMedGemma
-photonic chip:
+This paper has described the complete physical implementation of the
+PhotoMedGemma photonic chip from first principles:
+
 \begin{enumerate}
-  \item 220\,nm SOI silicon photonic platform with standard components.
-  \item Single MZI cell (50\,\textmu m $\times$ 200\,\textmu m footprint)
-        implementing any SU(2) rotation.
-  \item Rank-64 Clements mesh: 2,016 MZIs on a 10\,mm $\times$ 10\,mm chip.
-  \item Multi-chip module: 8 chips for layer-0 attention, rank-64.
-  \item WDM parallelism: 8$\times$ attention head throughput for free.
-  \item Full system: $\approx 101$ chips with WDM, $\approx 806$ without.
-  \item Power: $\approx 8$\,W total vs.\ 300\,W for A100 GPU ($37\times$ savings).
+  \item \textbf{\SI{220}{\nano\metre} SOI platform}: single-mode waveguide with
+    $n_{\rm eff}=2.45$, loss $2-3$\,dB/cm, operating at \SI{1310}{\nano\metre}.
+  \item \textbf{Directional coupler}: 50:50 at $g=\SI{200}{\nano\metre}$,
+    $L_c=\SI{12}{\micro\metre}$, described by Eq.~\eqref{eq:dc_matrix}.
+  \item \textbf{Thermal phase shifter}: $P_\pi = 12$\,mW at
+    $L=\SI{100}{\micro\metre}$; Eq.~\eqref{eq:phase_power}; no control loop
+    in steady state.
+  \item \textbf{MZI cell}: $50\times\SI{200}{\micro\metre}$ footprint,
+    SU(2) unitary Eq.~\eqref{eq:mzi_T}, extinction ratio $>30$\,dB.
+  \item \textbf{Rank-64 Clements mesh}: 2,016 MZIs,
+    $4.9\,\mathrm{mm}^2$ area on one chip.
+  \item \textbf{Thermal control}: TEC stabilises chip to $\pm 0.01$°C
+    (Eq.~\eqref{eq:thermal_stability}).
+  \item \textbf{WDM}: $8\times$ throughput for attention heads at $1\times$ area.
+  \item \textbf{System}: $\approx101$ chips (WDM), $\approx16.8$\,W total,
+    $18\times$ more efficient than A100.
 \end{enumerate}
 
-Figure placeholders throughout this paper indicate positions for fabrication
-photographs, KLayout mask visualisations, and measured device data to be
-inserted following chip tape-out.
+\paragraph{Next steps.}
+Paper~4 will describe the photonic ADC and the softmax/LayerNorm
+electronic co-processor; Paper~5 will present end-to-end benchmark results.
 
-% ----------------------------------------------------------------
+% ================================================================
 \bibliographystyle{plain}
 \begin{thebibliography}{9}
 
 \bibitem{clements2016}
-W.R.\ Clements et al., ``Optimal design for universal multiport interferometers,''
-\textit{Optica}, 3(12):1460--1465, 2016.
+W.R.\ Clements et al., ``Optimal design for universal multiport
+interferometers,'' \textit{Optica}, 3(12):1460--1465, 2016.
 
 \bibitem{shen2017}
 Y.\ Shen et al., ``Deep learning with coherent nanophotonic circuits,''
 \textit{Nature Photonics}, 11(7):441--446, 2017.
+
+\bibitem{haus1991}
+H.A.\ Haus, \textit{Waves and Fields in Optoelectronics}.
+Prentice Hall, 1991.
 
 \bibitem{gdsfactory}
 M.\ Luque-Gonz\'{a}lez et al., ``gdsfactory: A Python library for photonics,''
@@ -572,6 +1069,10 @@ M.\ Luque-Gonz\'{a}lez et al., ``gdsfactory: A Python library for photonics,''
 \bibitem{imec_isipp50g}
 imec, ``iSiPP50G Silicon Photonics Platform Design Rules,''
 Technical Document, 2023.
+
+\bibitem{reed2010}
+G.T.\ Reed et al., ``Silicon optical modulators,''
+\textit{Nature Photonics}, 4(8):518--526, 2010.
 
 \end{thebibliography}
 

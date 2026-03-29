@@ -1,15 +1,7 @@
-% ============================================================
-% Paper 4: NeurIPS-style conference paper
-% "PhotoMedGemma: Machine-Precision Compilation of a
-%  Medical Vision-Language Model onto Photonic Hardware"
-% ============================================================
-% NeurIPS 2026 format (approximate — uses standard article with
-% NeurIPS-like layout and conventions)
-% ============================================================
 \documentclass{article}
 
 % NeurIPS-style packages
-\usepackage[final]{neurips_2024}   % use neurips_2024.sty if available; else article
+% \usepackage[final]{neurips_2024}   % use neurips_2024.sty if available; else article
 \usepackage{amsmath, amssymb}
 \usepackage{graphicx}
 \usepackage{hyperref}
@@ -22,6 +14,8 @@
 
 \hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black}
 
+\graphicspath{{figures/}}
+
 % If neurips_2024.sty is not available, comment the \usepackage above and
 % uncomment the following minimal style:
 %\usepackage[margin=2.5cm]{geometry}
@@ -31,9 +25,10 @@
        Medical Vision-Language Model onto Photonic Hardware}
 
 \author{%
-  Linda H.\\
-  Independent Research\\
-  \texttt{photomedgemma@github.com}
+    Dalton Omondi\\[2pt]
+  \small Electrical and Electronics Engineering, Kenyatta University\\[2pt]
+  \small \href{https://github.com/GabuGravin41/photonmedgemma}{github.com/GabuGravin41/photonmedgemma}
+  % \thanks{Independent Research. E-mail: photomedgemma@github.com}
 }
 
 % ----------------------------------------------------------------
@@ -42,23 +37,25 @@
 
 % ----------------------------------------------------------------
 \begin{abstract}
-We present PhotoMedGemma, an open-source compiler that maps the weight matrices
-of MedGemma-4B-IT --- a 4-billion-parameter multimodal medical AI --- to phase
-settings for silicon photonic Mach-Zehnder interferometer (MZI) meshes.
-Photonic chips perform matrix-vector multiplication using light, offering
-$\sim 37\times$ better energy efficiency than GPU inference.
+We present PhotoMedGemma, a simulation-validated open-source compiler that
+maps the weight matrices of MedGemma-4B-IT --- a 4-billion-parameter multimodal
+medical AI --- to phase settings for silicon photonic Mach-Zehnder
+interferometer (MZI) meshes.
+Photonic chips perform matrix-vector multiplication using light, projecting
+$\sim 37\times$ better energy efficiency than GPU inference under idealised
+steady-state assumptions.
 The critical barrier to deployment of AI in global-south hospitals
 (data sovereignty, connectivity, energy) motivates this hardware approach.
 
 Our compiler performs truncated singular value decomposition (SVD) of each
 weight matrix, followed by Clements decomposition of the resulting unitary
 factors into MZI phase angles.
-We validate the pipeline on real MedGemma activations captured from five
-breast cancer PNG images.
+We validate the pipeline numerically on real MedGemma activations captured
+from five breast cancer PNG images.
 The compiled Clements mesh reproduces both unitary factors to errors
 $< 8 \times 10^{-15}$ (machine precision) for all four layer-0 attention
-projections.
-We report a complete rank sweep from $r = 64$ to full rank, showing
+projections (query, key, value, output).
+We report a rank sweep from $r = 64$ to full rank, showing
 SVD approximation error decreasing from $6.9 \times 10^{-1}$ at rank 64
 to machine precision at full rank, with MZI counts scaling as $r(r-1)/2$.
 All code and compiled phase maps are released publicly.
@@ -86,14 +83,18 @@ No dynamic weight updates are needed; the chip's heaters are set once and
 consume near-zero steady-state power.
 
 \paragraph{Contributions.}
+The SVD-Clements pipeline for photonic neural networks is well-established
+\citep{reck1994, clements2016, shen2017, pai2023}.
+Our contribution is its application to a \emph{real production-scale medical
+VLM}, with:
 \begin{itemize}
-  \item[(1)] A complete open-source compiler from MedGemma weights to
-             Clements MZI phase maps, validated at machine precision
+  \item[(1)] A simulation-validated open-source compiler from MedGemma weights
+             to Clements MZI phase maps, verified at machine precision
              ($\varepsilon < 8 \times 10^{-15}$).
   \item[(2)] A simulation framework applying compiled phases to real MedGemma
              activations from breast cancer images, measuring SVD approximation
              error against digital ground truth.
-  \item[(3)] A full rank sweep ($r = 64, 128, 256, 512, 1024, 2048$) with
+  \item[(3)] A rank sweep ($r = 64, 128, 256, 512, 1024, 2048$) with
              honest reporting of accuracy-hardware trade-offs.
   \item[(4)] Open-source release of all code, compiled phases, and data.
 \end{itemize}
@@ -286,7 +287,7 @@ enabling deployment at Kenyatta National Hospital and similar settings across
 the global south.
 
 Code, phase maps, sweep data, and this paper are at:
-\url{https://github.com/yourusername/photomedgemma}.
+\url{github.com/GabuGravin41/photonmedgemma}.
 
 % ----------------------------------------------------------------
 \bibliographystyle{plain}

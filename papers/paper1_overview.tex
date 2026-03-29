@@ -28,6 +28,8 @@
   urlcolor=blue!70!black,
 }
 
+\graphicspath{{figures/}}
+
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \lstset{
@@ -130,17 +132,26 @@ GPU, but implemented in photons rather than electrons.
 
 \paragraph{Contributions.} This paper presents:
 \begin{enumerate}
-  \item A complete open-source compiler (\S\ref{sec:compiler}) from MedGemma
-        weights to MZI phase maps, validated at machine precision.
+  \item An open-source, simulation-validated compiler (\S\ref{sec:compiler})
+        from MedGemma weights to MZI phase maps, verified at machine precision.
   \item A simulation framework (\S\ref{sec:simulation}) that applies the
         compiled Clements mesh to real MedGemma activations and compares the
         output to the digital ground truth.
   \item A rank sweep (\S\ref{sec:results}) from $r=64$ to full rank across all
-        four layer-0 attention projections, with honest reporting of SVD
-        approximation error, chip compilation fidelity, and hardware cost.
+        four layer-0 attention projections (Q, K, V, O), with honest reporting
+        of SVD approximation error, chip compilation fidelity, and hardware cost.
   \item A chip architecture specification (\S\ref{sec:architecture}) for
-        220\,nm SOI silicon photonics with full power budget analysis.
+        220\,nm SOI silicon photonics with projected power budget.
 \end{enumerate}
+
+\noindent
+\textbf{Scope.} The current work is a \emph{numerical simulation study}:
+we validate the compiler's algorithmic correctness on GPU-extracted weights and
+activations.
+No optical simulation with physical impairments (loss, crosstalk) or hardware
+fabrication is reported.
+End-to-end evaluation of downstream medical task accuracy at each rank is
+ongoing.
 
 % ----------------------------------------------------------------
 \section{Background}
@@ -242,7 +253,24 @@ which is computed by first applying MZIs in \emph{descending column order}
 
 \subsection{Pipeline Overview}
 
-The compilation pipeline proceeds in six stages:
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig7_compilation_pipeline.pdf}
+  \caption{PhotoMedGemma compilation pipeline: from MedGemma weights through
+           SVD and Clements decomposition to photonic phase maps and GDS layouts.}
+  \label{fig:pipeline}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig11_svd_circuit_architecture.pdf}
+  \caption{Photonic SVD circuit for one linear layer: $V^\dagger$ Clements mesh,
+           $\Sigma$ attenuator bank, $U$ Clements mesh.  Light enters carrying
+           $\mathbf{x}$; exits carrying $\mathbf{y} = W\mathbf{x}$.}
+  \label{fig:svd_circuit}
+\end{figure}
+
+The compilation pipeline (Figure~\ref{fig:pipeline}) proceeds in six stages:
 
 \begin{enumerate}
   \item \textbf{Model Parser}: loads MedGemma weights from HuggingFace
@@ -385,7 +413,17 @@ Table~\ref{tab:comparison} reports all three metrics for rank-64 and full rank.
 \end{tabular}
 \end{table}
 
-Three conclusions follow immediately from Table~\ref{tab:comparison}:
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig5_error_comparison_bars.pdf}
+  \caption{Three independent error metrics for each layer-0 attention
+           projection. SVD approximation error (rank-64) is the dominant
+           source; quantisation and compilation errors are negligible.}
+  \label{fig:error_bars}
+\end{figure}
+
+Three conclusions follow immediately from Table~\ref{tab:comparison} and
+Figure~\ref{fig:error_bars}:
 \begin{enumerate}
   \item \textbf{Compilation is exact.}
         Chip fidelity is at machine precision ($\approx 10^{-15}$) for all
@@ -411,11 +449,13 @@ $r \in \{64, 128, 256, 512, 1024, 2048\}$ (where applicable).
 \begin{table}[h]
 \centering
 \caption{Full rank sweep for \texttt{q\_proj} ($2048 \times 2560$, full rank = 2048).
-         All chip-fidelity values are $\approx 10^{-15}$.}
+         All chip-fidelity values are $\approx 10^{-15}$.
+         \textbf{Energy}: Frobenius-norm energy retained,
+         $\sum_{i=1}^r \sigma_i^2 / \sum_{\rm all} \sigma_i^2$.}
 \label{tab:rank_sweep_q}
 \begin{tabular}{rrcrrr}
 \toprule
-\textbf{Rank} & \textbf{Energy} & \textbf{SVD error} & \textbf{MZIs/mesh} &
+\textbf{Rank} & \textbf{Energy (\%)} & \textbf{SVD error} & \textbf{MZIs/mesh} &
 \textbf{Area (std)} & \textbf{Area (cmp)} \\
 \midrule
     64 & 28.8\% & 0.186 &        2,016 &    4.9\,mm$^2$ &    1.6\,mm$^2$ \\
@@ -451,7 +491,37 @@ Each projection requires 2 unitary meshes (Vh + U) plus a sigma (VOA) stage.
 \end{tabular}
 \end{table}
 
-The v\_proj matrix has the slowest singular value decay, indicating that
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig1_svd_error_vs_rank.pdf}
+  \caption{SVD approximation error vs.\ rank for all four layer-0 attention
+           projections. At full rank, error reaches machine precision
+           ($\sim 10^{-15}$). The v\_proj matrix has the slowest decay.}
+  \label{fig:svd_error_rank}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig14_svd_error_heatmap.pdf}
+  \caption{SVD error heatmap across all projections and ranks.
+           v\_proj at rank~64 (0.669) is the hardest case; all projections
+           reach zero error at full rank.}
+  \label{fig:heatmap}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\textwidth]{fig2_energy_retained_vs_rank.pdf}
+  \hfill
+  \includegraphics[width=0.48\textwidth]{fig8_error_vs_mzis_tradeoff.pdf}
+  \caption{Left: Frobenius-norm energy retained vs.\ rank.
+           Right: SVD approximation error vs.\ MZI count
+           (lower-left = better).}
+  \label{fig:energy_tradeoff}
+\end{figure}
+
+The v\_proj matrix has the slowest singular value decay
+(Figures~\ref{fig:svd_error_rank}--\ref{fig:heatmap}), indicating that
 it requires higher rank for a given approximation quality.
 This is a physical property of the weight matrix, not a limitation of the
 compiler.
@@ -473,6 +543,27 @@ Key parameters:
   \item Coupling loss: 2--4\,dB per grating coupler
   \item Detector: Ge photodiode, $> 40$\,GHz bandwidth, 0.9\,A/W responsivity
 \end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig10_clements_mesh_schematic.pdf}
+  \caption{Clements MZI mesh topology for 8~modes (illustrative).
+           Each orange box is an MZI with parameters $(\theta, \varphi)$.
+           Green circles form the diagonal phase screen $D$.
+           The rank-64 chip uses 2,016 MZIs on 64~modes.}
+  \label{fig:clements_mesh}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\textwidth]{fig3_mzi_count_vs_rank.pdf}
+  \hfill
+  \includegraphics[width=0.48\textwidth]{fig4_chip_area_vs_rank.pdf}
+  \caption{Left: MZI count scaling with rank (log-log), with current and
+           near-term fabrication limits shown as reference lines.
+           Right: Chip area per mesh for Standard and Compact Si technologies.}
+  \label{fig:mzi_area_scaling}
+\end{figure}
 
 \subsection{Single Chip: 10\,mm $\times$ 10\,mm}
 
@@ -504,12 +595,42 @@ Memory (KV cache)              &    2\,W  & LPDDR5 \\
 \end{table}
 
 At 1 token per millisecond: $8\,\text{mJ/token}$ versus
-$300\,\text{mJ/token}$ for an A100 --- a \textbf{37$\times$ improvement in
-energy efficiency}.
+$300\,\text{mJ/token}$ for an A100 --- a \textbf{projected 37$\times$
+improvement in energy efficiency} (see Section~\ref{sec:discussion} for
+caveats).
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig6_power_comparison.pdf}
+  \caption{Projected power and energy-per-token comparison: A100 GPU vs.\
+           PhotoMedGemma (rank-64).  The photonic advantage is dominated by
+           eliminating weight-memory access energy.}
+  \label{fig:power_comparison}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig13_system_architecture.pdf}
+  \caption{System hierarchy: single MZI $\to$ Clements mesh $\to$ 10\,mm chip
+           $\to$ multi-chip module $\to$ full MedGemma system.}
+  \label{fig:system}
+\end{figure}
 
 % ----------------------------------------------------------------
 \section{Discussion}
 \label{sec:discussion}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\textwidth]{fig9_compilation_fidelity.pdf}
+  \hfill
+  \includegraphics[width=0.48\textwidth]{fig15_feasibility_zones.pdf}
+  \caption{Left: Clements compilation fidelity for $U$ and $V^\dagger$ meshes
+           (all at machine precision).
+           Right: SVD error vs.\ chip area with manufacturing feasibility
+           zones.}
+  \label{fig:fidelity_feasibility}
+\end{figure}
 
 \paragraph{On SVD approximation error.}
 The rank-64 SVD errors (0.19--0.67) represent genuine information loss relative
@@ -530,16 +651,56 @@ silicon photonics scales.
 
 \paragraph{On fabrication.}
 The compilation output (\texttt{output/real/phase\_map.json},
-\texttt{output/real/netlist/}, \texttt{output/real/gds/}) is ready for
-submission to a photonic foundry.
+\texttt{output/real/netlist/}, \texttt{output/real/gds/}) targets foundry
+submission via multi-project wafer (MPW) runs through ePIXfab or AIM Photonics.
 The GDS layout uses standard \texttt{gdsfactory} cells compatible with 220\,nm
 SOI PDKs from imec, AIM Photonics, and GlobalFoundries.
+Tape-out has not yet been performed.
+
+\paragraph{Power budget caveats.}
+The 0\,mW steady-state heater power is idealised: real systems require
+thermal trimming ($\approx$0.5--2\,W system-wide) to compensate for
+heater-to-heater crosstalk.
+Wall-plug laser efficiency ($\sim$10--20\%) increases electrical input
+beyond the 800\,mW optical figure.
+The $37\times$ efficiency advantage over A100 should be understood as a
+projected upper bound under favourable assumptions.
+
+% ----------------------------------------------------------------
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}
+  \item \textbf{No end-to-end medical benchmark evaluation.}
+        The SVD errors reported measure layer-level weight reconstruction
+        fidelity, not downstream clinical task accuracy on MedQA, PubMedQA,
+        or breast cancer classification.
+        Whether rank-64 errors (0.19--0.67) degrade diagnostic performance
+        meaningfully requires propagating approximate weights through all
+        46~layers.
+  \item \textbf{No optical simulation.}
+        All validation is in exact floating-point arithmetic.
+        Real photonic chips will incur propagation loss ($\sim$20--30\,dB for
+        a 10\,mm mesh), thermal crosstalk, coupler splitting variations, and
+        detector noise.
+  \item \textbf{Limited activation samples.}
+        Only 5~data points (1~token per image $\times$ 5~images) were captured.
+        A thorough evaluation requires diverse clinical inputs and multi-token
+        generation.
+  \item \textbf{Layer~0 only.}
+        Scaling to all 46~layers assumes compilation fidelity and SVD
+        compressibility are representative.
+  \item \textbf{Vision encoder.}
+        The SigLIP-So400M encoder is currently handled electronically; the
+        same compilation pipeline applies to its weights but is not yet
+        validated.
+\end{enumerate}
 
 % ----------------------------------------------------------------
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have presented PhotoMedGemma: a complete compiler and simulation framework
+We have presented PhotoMedGemma: a simulation-validated compiler
 that translates MedGemma-4B-IT's attention weights into Clements MZI phase
 maps for silicon photonic chips.
 The compilation achieves machine precision ($\approx 7 \times 10^{-15}$) for
@@ -562,8 +723,8 @@ All code, compiled phase maps, and experimental results are open-source.
 
 \bibitem{medgemma2024}
 Google DeepMind,
-\textit{MedGemma: A Family of Medical AI Models},
-Technical Report, 2024.
+\textit{MedGemma: Medical AI Foundation Models},
+arXiv:2507.05201, 2025.
 
 \bibitem{gemma3_2024}
 Google DeepMind,

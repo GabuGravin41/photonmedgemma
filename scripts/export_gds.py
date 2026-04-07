@@ -81,13 +81,24 @@ GC_WIDTH_UM       = 15.0     # grating coupler pad width (schematic)
 GC_LENGTH_UM      = 30.0     # grating coupler pad length
 HEATER_ROUTING_H  = 300.0    # height of heater metal routing strip at chip bottom
 
-# GDS layers
+# GDS layers — per-chip
 L_SI      = 1   # silicon core
 L_THETA   = 2   # TiN heater — θ phase
 L_PHI     = 3   # TiN heater — φ phase
 L_METAL   = 4   # metal contacts
 L_BOUND   = 5   # chip boundary
 L_LABEL   = 6   # text labels
+
+# GDS layers — assembly (chiplet + interposer)
+L_CHIPLET_BOUND  = 10  # chiplet group outline
+L_INTERPOSER     = 11  # silicon interposer substrate
+L_DICING_LANE    = 12  # dicing lanes between chiplets
+L_FIBER_RIBBON   = 13  # inter-chip fiber ribbon routing
+L_BOND_PAD_ARRAY = 14  # C4 micro-bump bond pad arrays
+L_INTERPOSER_WG  = 15  # interposer waveguide routing
+L_ASSEMBLY_LABEL = 16  # chiplet-level text annotations
+L_STACK_CROSS    = 20  # 3D stack cross-section geometry
+L_STACK_LABEL    = 21  # 3D stack cross-section labels
 
 
 # ── GDS primitives ─────────────────────────────────────────────────────────────
@@ -473,16 +484,449 @@ KLAYOUT_LYPROPS = """\
   <name>Labels</name>
   <source>6/0@1</source>
  </properties>
+ <properties>
+  <frame-color>#22cc44</frame-color>
+  <fill-color>#00000000</fill-color>
+  <name>Chiplet boundary</name>
+  <source>10/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#8844ff</frame-color>
+  <fill-color>#8844ff</fill-color>
+  <fill-brightness>-180</fill-brightness>
+  <name>Interposer substrate</name>
+  <source>11/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ff2222</frame-color>
+  <fill-color>#ff2222</fill-color>
+  <fill-brightness>-120</fill-brightness>
+  <name>Dicing lanes</name>
+  <source>12/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#00ffff</frame-color>
+  <fill-color>#00ffff</fill-color>
+  <fill-brightness>-80</fill-brightness>
+  <name>Fiber ribbon routing</name>
+  <source>13/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ffcc00</frame-color>
+  <fill-color>#ffcc00</fill-color>
+  <name>Bond pad arrays (C4)</name>
+  <source>14/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#00aacc</frame-color>
+  <fill-color>#00aacc</fill-color>
+  <name>Interposer waveguides</name>
+  <source>15/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#cccccc</frame-color>
+  <fill-color>#00000000</fill-color>
+  <name>Assembly labels</name>
+  <source>16/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#888888</frame-color>
+  <fill-color>#888888</fill-color>
+  <fill-brightness>-100</fill-brightness>
+  <name>Stack cross-section</name>
+  <source>20/0@1</source>
+ </properties>
+ <properties>
+  <frame-color>#ffffff</frame-color>
+  <fill-color>#00000000</fill-color>
+  <name>Stack labels</name>
+  <source>21/0@1</source>
+ </properties>
 </layer-properties>
 """
 
 
-def write_klayout_props(output_dir: Path):
-    """Write a KLayout layer properties file for nice rendering."""
-    props_path = output_dir / "photomedgemma.lyp"
+def write_klayout_props(output_dir: Path, filename: str = "photomedgemma.lyp") -> Path:
+    """Write a KLayout layer properties file for nice rendering of the full assembly."""
+    props_path = output_dir / filename
     props_path.write_text(KLAYOUT_LYPROPS)
     logger.info(f"KLayout layer properties: {props_path}")
     return props_path
+
+
+# ── Chiplet GDS generator ──────────────────────────────────────────────────────
+
+def generate_chiplet_gds(
+    chiplet_id: int,
+    chiplet_type: str,
+    layer_idx: int,
+    chip_ids: List[int],
+    chip_layout: List[dict],          # list of {chip_id, local_x_um, local_y_um, proj_key, matrix_type}
+    width_um: float,
+    height_um: float,
+    chip_gds_paths: Dict[int, Path],
+    output_path: Path,
+    chip_size_um: float = 10_000.0,
+    n_modes: int = 64,
+    mode_pitch: float = 127.0,
+    draw_fiber_routing: bool = True,
+    draw_bond_pads: bool = True,
+    dicing_lane_um: float = 75.0,
+    chiplet_margin_um: float = 200.0,
+) -> dict:
+    """
+    Generate a GDS for a single chiplet — a group of chips arranged in a grid
+    with fiber ribbon routing, bond pads, and dicing lanes.
+
+    Uses a hierarchical cell structure:
+      CHIPLET_{id}_{type}_L{layer}
+        ├── Imported chip cells (prefixed C{chip_id}_)
+        ├── L_CHIPLET_BOUND outline
+        ├── L_FIBER_RIBBON inter-chip routing lines
+        ├── L_BOND_PAD_ARRAY C4 bond pad rows
+        └── L_DICING_LANE strips
+
+    Args:
+        chiplet_id:      Chiplet index.
+        chiplet_type:    "attention", "ffn", or "other".
+        layer_idx:       Transformer layer index.
+        chip_ids:        Ordered list of chip IDs in this chiplet.
+        chip_layout:     Per-chip local positions and projection info.
+        width_um:        Full chiplet width (including margins).
+        height_um:       Full chiplet height (including margins).
+        chip_gds_paths:  Dict mapping chip_id → Path of individual chip GDS.
+        output_path:     Where to write chiplet GDS.
+        chip_size_um:    Per-chip die size (square, μm).
+        n_modes:         Number of optical modes (fiber channels per chip edge).
+        mode_pitch:      Mode pitch for fiber ribbon (μm).
+        draw_fiber_routing: Draw inter-chip fiber ribbon lines.
+        draw_bond_pads:  Draw C4 bond pad arrays.
+        dicing_lane_um:  Width of dicing lanes.
+        chiplet_margin_um: Margin inside chiplet boundary.
+
+    Returns:
+        dict with chiplet stats.
+    """
+    try:
+        import gdspy
+    except ImportError:
+        logger.error("gdspy not installed. Run: pip install gdspy")
+        return {}
+
+    cell_name = f"CHIPLET_{chiplet_id:03d}_{chiplet_type.upper()}_L{layer_idx}"
+    lib = gdspy.GdsLibrary(unit=1e-6, precision=1e-9)
+    top = lib.new_cell(cell_name)
+
+    # Build a map of local positions
+    layout_by_id: Dict[int, dict] = {cl["chip_id"]: cl for cl in chip_layout}
+
+    # ── Import each chip's GDS and place it ──────────────────────────────────
+    for cid in chip_ids:
+        gds_path = chip_gds_paths.get(cid)
+        if gds_path is None or not Path(gds_path).exists():
+            logger.warning(f"  Chip {cid} GDS not found: {gds_path} — drawing outline only")
+            # Draw placeholder outline
+            cl = layout_by_id.get(cid, {"local_x_um": 0, "local_y_um": 0})
+            ox = chiplet_margin_um + cl["local_x_um"]
+            oy = chiplet_margin_um + cl["local_y_um"]
+            _rect(top, ox, oy, ox + chip_size_um, oy + chip_size_um, L_BOUND)
+            continue
+
+        # Read chip library and import cells with unique prefix
+        chip_lib = gdspy.GdsLibrary()
+        chip_lib.read_gds(str(gds_path))
+
+        # Find the top cell (e.g. "CHIP_000")
+        chip_top_cells = chip_lib.top_level()
+        if not chip_top_cells:
+            logger.warning(f"  Chip {cid}: no top-level cell found in {gds_path}")
+            continue
+        chip_top_cell = chip_top_cells[0]
+
+        # Import all cells from chip library, renaming to avoid collisions
+        prefix = f"C{cid:03d}_"
+        imported_names: Dict[str, str] = {}
+        for orig_name, cell in chip_lib.cells.items():
+            new_name = prefix + orig_name
+            if new_name not in lib.cells:
+                new_cell = gdspy.Cell(new_name)
+                # Copy polygons
+                for poly in cell.get_polygons(by_spec=True).items():
+                    spec, polys = poly
+                    layer, datatype = spec
+                    for pts in polys:
+                        new_cell.add(gdspy.Polygon(pts, layer=layer, datatype=datatype))
+                # Copy labels (anchor stored as int in gdspy internals — use "nw")
+                for lbl in cell.labels:
+                    anchor = lbl.anchor if isinstance(lbl.anchor, str) else "nw"
+                    new_cell.add(gdspy.Label(
+                        lbl.text, lbl.position, anchor,
+                        lbl.rotation, lbl.magnification, lbl.x_reflection,
+                        layer=lbl.layer, texttype=lbl.texttype
+                    ))
+                lib.cells[new_name] = new_cell
+            imported_names[orig_name] = new_name
+
+        # Place chip top cell at its local position within the chiplet
+        cl = layout_by_id.get(cid, {"local_x_um": 0, "local_y_um": 0})
+        ox = chiplet_margin_um + cl["local_x_um"]
+        oy = chiplet_margin_um + cl["local_y_um"]
+
+        renamed_top = imported_names.get(chip_top_cell.name)
+        if renamed_top and renamed_top in lib.cells:
+            top.add(gdspy.CellReference(lib.cells[renamed_top], (ox, oy)))
+
+        # Draw dicing lane between chips (above and right edges)
+        _rect(top, ox + chip_size_um, oy,
+              ox + chip_size_um + dicing_lane_um, oy + chip_size_um,
+              L_DICING_LANE)
+
+    # ── Chiplet boundary ───────────────────────────────────────────────────────
+    _rect(top, 0, 0, width_um, height_um, L_CHIPLET_BOUND)
+    _label(top,
+           f"Chiplet {chiplet_id}: {chiplet_type.upper()}  Layer {layer_idx}  "
+           f"({len(chip_ids)} chips)",
+           10, height_um - 20, size=20)
+
+    # ── Fiber ribbon routing between chips ────────────────────────────────────
+    if draw_fiber_routing and len(chip_layout) > 1:
+        ribbon_w = 20.0   # schematic ribbon width (μm)
+        # Sort chip layout by x position to find adjacent pairs
+        sorted_layout = sorted(chip_layout, key=lambda cl: cl["local_x_um"])
+        for i in range(len(sorted_layout) - 1):
+            left  = sorted_layout[i]
+            right = sorted_layout[i + 1]
+            lx = chiplet_margin_um + left["local_x_um"] + chip_size_um
+            rx = chiplet_margin_um + right["local_x_um"]
+            # Only draw ribbon if chips are horizontally adjacent
+            if rx > lx and (rx - lx) < chip_size_um * 1.5:
+                ly = chiplet_margin_um + left["local_y_um"]
+                # Draw 4 ribbon bands (representing 64-channel fiber ribbon groups)
+                for band in range(4):
+                    y_frac = (band + 0.5) / 4
+                    yc = ly + y_frac * chip_size_um
+                    _rect(top, lx, yc - ribbon_w / 2, rx, yc + ribbon_w / 2,
+                          L_FIBER_RIBBON)
+
+    # ── Inter-chiplet waveguide stubs (optical output connectors) ─────────────
+    # Short waveguide stubs at left and right edges of the chiplet
+    stub_len = 80.0
+    stub_pitch = mode_pitch * 4  # sparse representation
+    n_stubs = min(4, n_modes // 16)
+    for i in range(n_stubs):
+        y = chiplet_margin_um + (i + 1) * chip_size_um / (n_stubs + 1)
+        # Left input stub
+        _rect(top, 0, y - WG_WIDTH_UM / 2, stub_len, y + WG_WIDTH_UM / 2,
+              L_INTERPOSER_WG)
+        # Right output stub
+        _rect(top, width_um - stub_len, y - WG_WIDTH_UM / 2,
+              width_um, y + WG_WIDTH_UM / 2, L_INTERPOSER_WG)
+
+    # ── Bond pad arrays (C4 micro-bumps at top edge of each chip) ─────────────
+    if draw_bond_pads:
+        pad_w, pad_h = 60.0, 60.0
+        pad_pitch = 120.0
+        n_pads = min(16, int(chip_size_um / pad_pitch))
+        for cl in chip_layout:
+            ox = chiplet_margin_um + cl["local_x_um"]
+            oy = chiplet_margin_um + cl["local_y_um"]
+            # Top edge bond pads
+            pad_y0 = oy + chip_size_um - pad_h - 10
+            for p in range(n_pads):
+                px = ox + (chip_size_um - n_pads * pad_pitch) / 2 + p * pad_pitch
+                _rect(top, px, pad_y0, px + pad_w, pad_y0 + pad_h, L_BOND_PAD_ARRAY)
+
+    # ── Write GDS ─────────────────────────────────────────────────────────────
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    lib.write_gds(str(output_path))
+    size_kb = output_path.stat().st_size // 1024
+    logger.info(f"  Chiplet {chiplet_id} GDS: {output_path}  ({size_kb} KB)")
+
+    return {
+        "chiplet_id":   chiplet_id,
+        "chiplet_type": chiplet_type,
+        "layer_idx":    layer_idx,
+        "n_chips":      len(chip_ids),
+        "chip_ids":     chip_ids,
+        "width_mm":     width_um / 1000,
+        "height_mm":    height_um / 1000,
+        "gds_path":     str(output_path),
+        "cell_name":    cell_name,
+    }
+
+
+# ── Assembly GDS generator ─────────────────────────────────────────────────────
+
+def generate_assembly_gds(
+    chiplets: List[dict],              # chiplet dicts from manifest
+    chiplet_gds_paths: Dict[int, Path],
+    output_path: Path,
+    interposer_width_um: float,
+    interposer_height_um: float,
+    model_id: str = "PhotoMedGemma",
+    representative_only: bool = True,
+    interposer_margin_um: float = 2_000.0,
+) -> dict:
+    """
+    Generate the full assembly GDS showing all chiplets on a 2.5D silicon interposer.
+
+    Cell hierarchy (visible as tree in KLayout):
+      ASSEMBLY_TOP
+        ├── INTERPOSER_SUBSTRATE (L_INTERPOSER, full interposer box)
+        ├── CHIPLET_000_ATTENTION_L0 → CellReference (full geometry)
+        ├── CHIPLET_001_FFN_L0       → CellReference (full geometry)
+        ├── [placeholder rectangles for remaining layers on L_CHIPLET_BOUND]
+        └── ASSEMBLY_LABELS
+
+    representative_only=True:
+      Only chiplets[0] and chiplets[1] are drawn with full GDS geometry.
+      Any additional chiplets (from more transformer layers) are shown as
+      grey placeholder outlines with text labels — keeps the file renderable.
+
+    Args:
+        chiplets:            List of chiplet dicts from chiplet_manifest.json.
+        chiplet_gds_paths:   Dict mapping chiplet_id → Path to chiplet GDS.
+        output_path:         Where to write assembly.gds.
+        interposer_width_um: Total interposer width from manifest.
+        interposer_height_um:Total interposer height from manifest.
+        model_id:            Label string.
+        representative_only: Only render first layer pair fully.
+        interposer_margin_um:Margin around chiplets on the interposer.
+
+    Returns:
+        dict with assembly stats.
+    """
+    try:
+        import gdspy
+    except ImportError:
+        logger.error("gdspy not installed. Run: pip install gdspy")
+        return {}
+
+    lib = gdspy.GdsLibrary(unit=1e-6, precision=1e-9)
+    top = lib.new_cell("ASSEMBLY_TOP")
+
+    # Total interposer size with margins
+    ip_w = interposer_width_um  + 2 * interposer_margin_um
+    ip_h = interposer_height_um + 2 * interposer_margin_um
+    ip_x0 = -interposer_margin_um
+    ip_y0 = -interposer_margin_um
+
+    # ── Interposer substrate ───────────────────────────────────────────────────
+    ip_cell = lib.new_cell("INTERPOSER_SUBSTRATE")
+    _rect(ip_cell, ip_x0, ip_y0, ip_x0 + ip_w, ip_y0 + ip_h, L_INTERPOSER)
+    _label(ip_cell,
+           f"PhotoMedGemma 2.5D Silicon Interposer  |  {model_id}",
+           ip_x0 + 200, ip_y0 + ip_h - 400, size=100)
+    _label(ip_cell,
+           f"220nm SOI  |  1310nm  |  MZI mesh photonic compute",
+           ip_x0 + 200, ip_y0 + ip_h - 700, size=60)
+    _label(ip_cell,
+           f"Interposer: {ip_w/1000:.1f}mm x {ip_h/1000:.1f}mm",
+           ip_x0 + 200, ip_y0 + 200, size=60)
+    top.add(gdspy.CellReference(ip_cell, (0, 0)))
+
+    n_full_rendered = 0
+    n_placeholder = 0
+
+    for i, chiplet in enumerate(chiplets):
+        cid    = chiplet["chiplet_id"]
+        ctype  = chiplet["chiplet_type"]
+        lidx   = chiplet["layer_idx"]
+        ox     = chiplet["origin_x_um"]
+        oy     = chiplet["origin_y_um"]
+        cw     = chiplet["width_um"]
+        ch     = chiplet["height_um"]
+
+        render_full = (not representative_only) or (i < 2)
+
+        if render_full and cid in chiplet_gds_paths:
+            gds_path = chiplet_gds_paths[cid]
+            if Path(gds_path).exists():
+                # Import chiplet GDS cells
+                clib = gdspy.GdsLibrary()
+                clib.read_gds(str(gds_path))
+                prefix = f"CL{cid:03d}_"
+                imported_top = None
+                for orig_name, cell in clib.cells.items():
+                    new_name = prefix + orig_name
+                    if new_name not in lib.cells:
+                        new_cell = gdspy.Cell(new_name)
+                        for spec, polys in cell.get_polygons(by_spec=True).items():
+                            layer, datatype = spec
+                            for pts in polys:
+                                new_cell.add(gdspy.Polygon(pts, layer=layer, datatype=datatype))
+                        for lbl in cell.labels:
+                            anchor = lbl.anchor if isinstance(lbl.anchor, str) else "nw"
+                            new_cell.add(gdspy.Label(
+                                lbl.text, lbl.position, anchor,
+                                lbl.rotation, lbl.magnification, lbl.x_reflection,
+                                layer=lbl.layer, texttype=lbl.texttype
+                            ))
+                        lib.cells[new_name] = new_cell
+                    if not imported_top:
+                        imported_top = new_name
+
+                # Find the top cell of the chiplet
+                ctop_cells = clib.top_level()
+                if ctop_cells:
+                    ctop_name = prefix + ctop_cells[0].name
+                    if ctop_name in lib.cells:
+                        top.add(gdspy.CellReference(lib.cells[ctop_name], (ox, oy)))
+                        n_full_rendered += 1
+                        continue
+
+        # Placeholder: draw outline + label
+        ph_cell_name = f"PLACEHOLDER_CL{cid:03d}"
+        if ph_cell_name not in lib.cells:
+            ph_cell = lib.new_cell(ph_cell_name)
+            _rect(ph_cell, 0, 0, cw, ch, L_CHIPLET_BOUND)
+            _label(ph_cell,
+                   f"Layer {lidx}: {ctype.upper()} chiplet  "
+                   f"(chips {chiplet['chip_ids']})",
+                   50, ch / 2, size=max(30, int(cw / 500)))
+        top.add(gdspy.CellReference(lib.cells[ph_cell_name], (ox, oy)))
+        n_placeholder += 1
+
+    # ── Inter-chiplet optical routing on interposer ────────────────────────────
+    # Draw short waveguide lines connecting chiplet output stubs to adjacent chiplets
+    interposer_wg_cell = lib.new_cell("INTERPOSER_WG_ROUTING")
+    for i in range(len(chiplets) - 1):
+        ca = chiplets[i]
+        cb = chiplets[i + 1]
+        # Horizontal connection between right edge of A and left edge of B
+        ax_right = ca["origin_x_um"] + ca["width_um"]
+        bx_left  = cb["origin_x_um"]
+        if abs(ca["origin_y_um"] - cb["origin_y_um"]) < ca["height_um"] * 0.5:
+            # Same row — connect horizontally
+            ymid = ca["origin_y_um"] + ca["height_um"] / 2
+            _rect(interposer_wg_cell,
+                  ax_right, ymid - WG_WIDTH_UM * 4,
+                  bx_left,  ymid + WG_WIDTH_UM * 4,
+                  L_INTERPOSER_WG)
+    top.add(gdspy.CellReference(interposer_wg_cell, (0, 0)))
+
+    # ── Write GDS ─────────────────────────────────────────────────────────────
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    lib.write_gds(str(output_path))
+    size_mb = output_path.stat().st_size / (1024 * 1024)
+    logger.info(
+        f"Assembly GDS: {output_path}  ({size_mb:.1f} MB)  "
+        f"[{n_full_rendered} full + {n_placeholder} placeholder chiplets]"
+    )
+    logger.info(
+        f"  Interposer: {ip_w/1000:.1f}mm x {ip_h/1000:.1f}mm"
+    )
+
+    return {
+        "n_chiplets_total":    len(chiplets),
+        "n_full_rendered":     n_full_rendered,
+        "n_placeholder":       n_placeholder,
+        "interposer_width_mm": ip_w / 1000,
+        "interposer_height_mm":ip_h / 1000,
+        "interposer_area_mm2": ip_w * ip_h / 1e6,
+        "gds_path":            str(output_path),
+        "size_mb":             size_mb,
+    }
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

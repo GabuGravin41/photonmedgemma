@@ -99,3 +99,10 @@ huggingface_token
 # ── Logs ──────────────────────────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Claude Code internal files ─────────────────────────────────────────────────
+.claude/
+
+# ── Chiplet mask output (large GDS binaries, regeneratable) ───────────────────
+output/chiplet_mask/
+output/stacking_analysis/
